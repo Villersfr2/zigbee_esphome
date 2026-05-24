@@ -169,7 +169,7 @@ def write_zha_default_clusters(enums):
         to_py += f"      ep_desc = ezb_zha_create_{device_name}(ep_id, &config);\n"
         to_py += "      break;\n    }\n"
     to_py += "    default:\n      ezb_af_ep_config_t config = {\n          .ep_id = ep_id,\n          .app_profile_id = EZB_AF_HA_PROFILE_ID,\n          .app_device_id = device_id,\n          .app_device_version = device_version,\n      };\n"
-    to_py += "      ep_desc = ezb_af_create_endpoint_desc(&config);\n  }\n  return ep_desc;\n}\n\n"
+    to_py += "      ep_desc = ezb_af_create_endpoint_desc(&config);\n  }\n  ezb_af_ep_desc_set_app_version(ep_desc, device_version);\n  return ep_desc;\n}\n\n"
     return to_py
 
 

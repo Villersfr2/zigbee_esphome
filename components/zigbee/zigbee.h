@@ -56,6 +56,7 @@ class ZigbeeTime;
 
 class ZigBeeComponent : public Component {
  public:
+  ZigBeeComponent();
   void setup() override;
   void loop() override;
   void dump_config() override;
@@ -127,7 +128,6 @@ class ZigBeeComponent : public Component {
   void add_attr_(ZigBeeAttribute *attr, uint8_t endpoint_id, uint16_t cluster_id, uint8_t role, uint16_t attr_id,
                  uint8_t attr_type, uint8_t attr_access, T *value_p);
   std::map<uint8_t, std::tuple<uint16_t, ezb_af_ep_desc_t>> endpoint_list_;
-  // std::map<std::tuple<uint8_t, uint16_t, uint8_t>, ezb_zcl_cluster_desc_t> attribute_list_;
   std::map<std::tuple<uint8_t, uint16_t, uint8_t, uint16_t>, ZigBeeAttribute *> attributes_;
   ezb_af_device_desc_t dev_desc_ = ezb_af_create_device_desc();
   uint8_t ident_time_;

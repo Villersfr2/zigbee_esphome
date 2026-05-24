@@ -9,8 +9,9 @@ ezb_err_t esphome_zb_cluster_add_or_update_attr(uint16_t cluster_id, ezb_zcl_clu
                                                 void *value_p) {
   ezb_zcl_attr_desc_t attr_desc = ezb_zcl_cluster_get_attr_desc(cluster_desc, attr_id, EZB_ZCL_STD_MANUF_CODE);
   if (attr_desc != NULL) {
-    ESP_LOGI(TAG, "Attribute 0x%04X already exists in cluster 0x%04X, ignore", attr_id, cluster_id);
-    return EZB_ERR_NONE;
+    // ezb_zcl_free_attr_desc(ezb_zcl_cluster_remove_attr_desc(cluster_desc, attr_id, EZB_ZCL_STD_MANUF_CODE));
+    return ezb_zcl_attr_desc_set_value(attr_desc, value_p);
+    // return EZB_ERR_NONE;
   }
   if (attr_access > 0) {
     attr_desc = ezb_zcl_create_attr_desc(attr_id, attr_type, attr_access, EZB_ZCL_STD_MANUF_CODE, value_p);
@@ -21,13 +22,12 @@ ezb_err_t esphome_zb_cluster_add_or_update_attr(uint16_t cluster_id, ezb_zcl_clu
   }
 }
 
-ezb_err_t esphome_zb_add_or_update_cluster(uint16_t cluster_id, ezb_af_ep_desc_t ep_desc,
-                                           ezb_zcl_cluster_desc_t cluster_desc, uint8_t role_mask) {
-  ezb_zcl_cluster_desc_t cl_desc = ezb_af_endpoint_get_cluster_desc(ep_desc, cluster_id, role_mask);
-  if (cl_desc != NULL) {
+ezb_err_t esphome_zb_add_or_update_cluster(uint16_t cluster_id, ezb_af_ep_desc_t ep_desc, uint8_t role_mask) {
+  if (ezb_af_endpoint_get_cluster_desc(ep_desc, cluster_id, role_mask) != NULL) {
     return EZB_ERR_NONE;
-    // ezb_zcl_free_cluster_desc(cl_desc);
   }
+  ezb_zcl_cluster_desc_t cluster_desc;
+  cluster_desc = esphome_zb_default_cluster_dscr_create(cluster_id, role_mask);
   return ezb_af_endpoint_add_cluster_desc(ep_desc, cluster_desc);
 }
 
@@ -152,6 +152,7 @@ ezb_af_ep_desc_t esphome_zb_zha_default_ep_desc_create(uint8_t ep_id, uint16_t d
       };
       ep_desc = ezb_af_create_endpoint_desc(&config);
   }
+  ezb_af_ep_desc_set_app_version(ep_desc, device_version);
   return ep_desc;
 }
 

@@ -12,7 +12,6 @@ from esphome.components.esp32 import (
     add_extra_script,
     add_idf_component,
     add_idf_sdkconfig_option,
-    idf_version,
     only_on_variant,
 )
 from esphome.components.esp32.const import (
@@ -41,6 +40,7 @@ from esphome.const import (
     CONF_WIFI,
 )
 from esphome.core import CORE, EsphomeError
+from esphome.coroutine import CoroPriority, coroutine_with_priority
 import esphome.final_validate as fv
 
 from .const import (
@@ -61,6 +61,7 @@ from .const import (
     CONF_ROUTER,
     CONF_SCALE,
     CONF_TRUST_CENTER_KEY,
+    CONF_USE_V2_SDK,
     BinarySensor,
     Sensor,
     Switch,
@@ -252,10 +253,6 @@ def validate_attributes(config):
 
 
 def final_validate(config):
-    if idf_version() >= cv.Version(6, 0, 0):
-        raise cv.Invalid(
-            "Zigbee component with sdk 2.0 is not supported on ESP-IDF v6.0.0 and above."
-        )
     esp_conf = fv.full_config.get()["esp32"]
     if CONF_PARTITIONS in esp_conf:
         with open(
@@ -292,6 +289,20 @@ def _require_vfs_select(config):
     """Register VFS select requirement during config validation."""
     # ZigBee uses esp_vfs_eventfd which requires VFS select support
     require_vfs_select()
+    return config
+
+
+def _validate_sdk_version(config):
+    """This branch supports only the new Zigbee SDK, so we need to check that.
+    This option prevents users from accidentally updating to the new SDK. Switching
+    requires full flash erase, no OTA update possible.
+    """
+    if not config.get(CONF_USE_V2_SDK):
+        raise cv.Invalid(
+            f"This version of the Zigbee component requires {CONF_USE_V2_SDK}=true."
+            " Attention: This requires a full flash erase and re-pairing, no OTA update possible."
+            " If you want to switch back to the old SDK, use the v1.x branch."
+        )
     return config
 
 
@@ -399,10 +410,12 @@ CONFIG_SCHEMA = cv.All(
                 ),
             ),
             cv.Optional(CONF_ON_JOIN): automation.validate_automation({}),
+            cv.Optional(CONF_USE_V2_SDK): cv.boolean,
         }
     ).extend(cv.COMPONENT_SCHEMA),
     cv.require_framework_version(esp_idf=cv.Version(5, 1, 2)),
     _require_vfs_select,
+    _validate_sdk_version,
     only_on_variant(
         supported=[
             VARIANT_ESP32H2,
@@ -526,10 +539,15 @@ async def attributes_to_code(var, ep_num, cl):
             )
 
 
+@coroutine_with_priority(CoroPriority.WORKAROUNDS)
+async def add_sdkconfigs(config):
+    add_idf_sdkconfig_option("CONFIG_LIBC_LOCKS_PLACE_IN_IRAM", True)
+
+
 async def to_code(config):
     add_idf_component(
         name="espressif/esp-zigbee-lib",
-        ref="2.0.0",
+        ref="2.0.1",
     )
 
     add_idf_sdkconfig_option("CONFIG_ZB_ENABLED", True)
@@ -599,6 +617,7 @@ async def to_code(config):
             )
             await attributes_to_code(var, ep[CONF_NUM], cl)
     await automation.build_callback_automations(var, config, _CALLBACK_AUTOMATIONS)
+    await add_sdkconfigs(config)
 
 
 ZIGBEE_ACTION_SCHEMA = cv.Schema(

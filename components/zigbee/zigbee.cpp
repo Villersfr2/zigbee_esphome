@@ -239,8 +239,9 @@ static void zb_attribute_handler(ezb_zcl_set_attr_value_message_t *message) {
            message->info.dst_ep, message->info.cluster_id,
            message->info.cluster_role == EZB_ZCL_CLUSTER_SERVER ? "server" : "client", message->info.status);
 
-  // if the attribute is On/Off and it is set to Off, restore the previous level
+  // if the attribute is On/Off and it is set to Off, restore the previous level. Todo: still needed?
   ezb_zcl_attr_desc_t current_level;
+  void *val = nullptr;
   if (message->info.cluster_id == EZB_ZCL_CLUSTER_ID_ON_OFF) {
     if (message->in.attribute.id == EZB_ZCL_ATTR_ON_OFF_ON_OFF_ID && !*(bool *) message->in.attribute.data.value) {
       ESP_LOGD(TAG, "turned off");
@@ -249,21 +250,14 @@ static void zb_attribute_handler(ezb_zcl_set_attr_value_message_t *message) {
                                               EZB_ZCL_ATTR_LEVEL_CURRENT_LEVEL_ID, EZB_ZCL_STD_MANUF_CODE);
         if (current_level) {
           ESP_LOGD(TAG, "got level");
-          void *val = NULL;
-          ezb_zcl_attr_desc_get_value(current_level, val);
-          ezb_zcl_set_attr_value(message->info.dst_ep, EZB_ZCL_CLUSTER_ID_LEVEL, EZB_ZCL_CLUSTER_SERVER,
-                                 EZB_ZCL_ATTR_LEVEL_CURRENT_LEVEL_ID, EZB_ZCL_STD_MANUF_CODE, val, false);
+          // ezb_zcl_attr_desc_get_value(current_level, val);
+          // ezb_zcl_set_attr_value(message->info.dst_ep, EZB_ZCL_CLUSTER_ID_LEVEL, EZB_ZCL_CLUSTER_SERVER,
+          //                        EZB_ZCL_ATTR_LEVEL_CURRENT_LEVEL_ID, EZB_ZCL_STD_MANUF_CODE, val, false);
         }
       }
     }
   }
-  if (current_level != NULL) {
-    void *val = NULL;
-    ezb_zcl_attr_desc_get_value(current_level, val);
-    enqueue_zb_event(message->info, message->in.attribute, (uint8_t *) val);
-  } else {
-    enqueue_zb_event(message->info, message->in.attribute, nullptr);
-  }
+  enqueue_zb_event(message->info, message->in.attribute, (uint8_t *) val);
   return;
 }
 
@@ -389,20 +383,14 @@ void ZigBeeComponent::create_default_cluster(uint8_t endpoint_id, uint16_t devic
   // Add basic cluster
   this->update_basic_cluster_(ep_desc);
   // Add identify cluster if not already present
-  if (ezb_af_endpoint_get_cluster_desc(ep_desc, EZB_ZCL_CLUSTER_ID_IDENTIFY, EZB_ZCL_CLUSTER_SERVER) == NULL) {
-    this->add_cluster(endpoint_id, EZB_ZCL_CLUSTER_ID_IDENTIFY, EZB_ZCL_CLUSTER_SERVER);
-  }
+  this->add_cluster(endpoint_id, EZB_ZCL_CLUSTER_ID_IDENTIFY, EZB_ZCL_CLUSTER_SERVER);
 }
 
 void ZigBeeComponent::add_cluster(uint8_t endpoint_id, uint16_t cluster_id, uint8_t role) {
-  ezb_zcl_cluster_desc_t cluster_desc;
-  switch (cluster_id) {
-    case 0:
-      return;
-    default:
-      cluster_desc = esphome_zb_default_cluster_dscr_create(cluster_id, role);
+  if (cluster_id == EZB_ZCL_CLUSTER_ID_BASIC) {
+    return;
   }
-  esphome_zb_add_or_update_cluster(cluster_id, std::get<1>(this->endpoint_list_[endpoint_id]), cluster_desc, role);
+  esphome_zb_add_or_update_cluster(cluster_id, std::get<1>(this->endpoint_list_[endpoint_id]), role);
 }
 
 void ZigBeeComponent::set_basic_cluster(std::string model, std::string manufacturer, std::string date, uint8_t power,
@@ -475,8 +463,7 @@ static void ezb_task_(void *pvParameters) {
   vTaskDelete(NULL);
 }
 
-void ZigBeeComponent::setup() {
-  global_zigbee = this;
+ZigBeeComponent::ZigBeeComponent() {
 #ifdef CONFIG_WIFI_COEX
   if (esp_coex_wifi_i154_enable() != ESP_OK) {
     this->mark_failed();
@@ -484,7 +471,7 @@ void ZigBeeComponent::setup() {
   }
 #endif
   // ESP_ERROR_CHECK(nvs_flash_init()); not needed, called by esp32 component
-  ESP_ERROR_CHECK(nvs_flash_init_partition("zb_storage"));
+  ESP_ERROR_CHECK(nvs_flash_init_partition(ESP_ZIGBEE_STORAGE_PARTITION_NAME));
 
   /* initialize Zigbee stack */
   esp_zigbee_platform_config_t platform_config = {
@@ -513,13 +500,12 @@ void ZigBeeComponent::setup() {
     this->mark_failed();
     return;
   }
+}
+
+void ZigBeeComponent::setup() {
+  global_zigbee = this;
   ezb_aps_secur_enable_distributed_security(false);
-  if (ezb_bdb_set_primary_channel_set(EZB_PRIMARY_CHANNEL_MASK)) {
-    ESP_LOGE(TAG, "Could not set primary channel mask");
-    this->mark_failed();
-    return;
-  }
-  ezb_secur_set_tclk_exchange_required(false);
+  // ezb_secur_set_tclk_exchange_required(false);
   if (ezb_app_signal_add_handler(this->app_signal_handler) != ESP_OK) {
     ESP_LOGE(TAG, "Could not set application signal handler");
     this->mark_failed();
@@ -532,17 +518,6 @@ void ZigBeeComponent::setup() {
   }
 
   ezb_err_t ret;
-
-  // clusters
-  // for (auto const &[key, val] : this->attribute_list_) {
-  //   ezb_af_ep_desc_t ep_desc = std::get<1>(this->endpoint_list_[std::get<0>(key)]);
-  //   ret = esphome_zb_add_or_update_cluster(std::get<1>(key), ep_desc, val, std::get<2>(key));
-  //   if (ret != EZB_ERR_NONE) {
-  //     ESP_LOGE(TAG, "Could not create cluster 0x%04X with role %u: %s", std::get<1>(key), std::get<2>(key),
-  //              esp_err_to_name(ret));
-  //   }
-  // }
-  // this->attribute_list_.clear();
 
   // endpoints
   for (auto const &[ep_id, dev] : this->endpoint_list_) {
@@ -560,11 +535,11 @@ void ZigBeeComponent::setup() {
 
   ezb_zcl_core_action_handler_register(zb_action_handler);
 
-  // if (ezb_bdb_set_primary_channel_set(EZB_PRIMARY_CHANNEL_MASK) != ESP_OK) {
-  //   ESP_LOGE(TAG, "Could not setup Zigbee");
-  //   this->mark_failed();
-  //   return;
-  // }
+  if (ezb_bdb_set_primary_channel_set(EZB_PRIMARY_CHANNEL_MASK) != ESP_OK) {
+    ESP_LOGE(TAG, "Could not setup Zigbee");
+    this->mark_failed();
+    return;
+  }
 
   // reporting
   for (auto &[_, attribute] : this->attributes_) {
