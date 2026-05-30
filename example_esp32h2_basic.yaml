@@ -24,7 +24,6 @@ sensor:
 zigbee:
   id: "zb"
   components: all
-  use_v2_sdk: true
   on_join:
     then:
       - logger.log: "Joined network"

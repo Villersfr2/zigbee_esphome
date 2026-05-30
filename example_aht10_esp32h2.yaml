@@ -51,7 +51,6 @@ sensor:
 
 zigbee:
   id: "zb"
-  use_v2_sdk: true
   endpoints:
     - num: 1
       device_type: COLOR_DIMMABLE_LIGHT

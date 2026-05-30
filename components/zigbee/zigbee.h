@@ -42,8 +42,8 @@ using zdo_info_user_ctx_t = struct ZdoInfoCtxS {
 #define ED_AGING_TIMEOUT EZB_NWK_ED_TIMEOUT_64MIN
 #define ED_KEEP_ALIVE 3000 /* 3000 millisecond */
 #define MAX_CHILDREN 10
-#define EZB_PRIMARY_CHANNEL_MASK (0x07FFF800U) /* Zigbee primary channel mask use in the example */
-#define ESP_ZIGBEE_STORAGE_PARTITION_NAME "zb_storage"
+#define EZB_PRIMARY_CHANNEL_MASK (0x07FFF800U)  /* Zigbee primary channel mask use in the example */
+#define ESP_ZIGBEE_STORAGE_PARTITION_NAME "nvs" /* Use default nvs partition */
 
 #define EZB_DEFAULT_RADIO_CONFIG() \
   { .radio_mode = ESP_ZIGBEE_RADIO_MODE_NATIVE, }

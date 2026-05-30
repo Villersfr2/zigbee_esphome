@@ -22,7 +22,6 @@ CONF_AS_GENERIC = "as_generic"
 CONF_ON_REPORT = "on_report"
 CONF_TRUST_CENTER_KEY = "trust_center_key"
 CONF_DEVICE_VERSION = "device_version"
-CONF_USE_V2_SDK = "use_v2_sdk"
 
 # dummies for upstream compatibility
 binary_sensor_ns = cg.esphome_ns.namespace("binary_sensor")

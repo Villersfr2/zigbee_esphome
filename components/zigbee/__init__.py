@@ -61,7 +61,6 @@ from .const import (
     CONF_ROUTER,
     CONF_SCALE,
     CONF_TRUST_CENTER_KEY,
-    CONF_USE_V2_SDK,
     BinarySensor,
     Sensor,
     Switch,
@@ -259,20 +258,14 @@ def final_validate(config):
             CORE.relative_config_path(esp_conf[CONF_PARTITIONS]), encoding="utf8"
         ) as f:
             partitions = f.read()
-            if ("zb_storage" not in partitions) and ("zb_fct" not in partitions):
+            if "zb_fct" not in partitions:
                 raise cv.Invalid(
-                    "Add \n'zb_storage, data, fat,   , 16K,'\n'zb_fct, data, fat, , 1K,'\n to your custom partition table."
+                    "Add \n'zb_fct, data, fat, , 1K,'\n to your custom partition table."
                 )
     if CONF_WIFI in fv.full_config.get():
-        if config[CONF_ROUTER] and CONF_AP in fv.full_config.get()[CONF_WIFI]:
-            raise cv.Invalid(
-                "Only Zigbee End Device can be used together with a Wifi Access Point."
-            )
         if CONF_AP in fv.full_config.get()[CONF_WIFI]:
-            _LOGGER.warning(
-                "Wifi Access Point might be unstable while Zigbee is active, use only as fallback."
-            )
-        elif config[CONF_ROUTER]:
+            raise cv.Invalid("Wifi Access Point cannot be used with Zigbee.")
+        if config[CONF_ROUTER]:
             _LOGGER.warning(
                 "The Zigbee Router might miss packets while Wifi is active and could destabilize "
                 "your network. Use only if Wifi is off most of the time."
@@ -289,20 +282,6 @@ def _require_vfs_select(config):
     """Register VFS select requirement during config validation."""
     # ZigBee uses esp_vfs_eventfd which requires VFS select support
     require_vfs_select()
-    return config
-
-
-def _validate_sdk_version(config):
-    """This branch supports only the new Zigbee SDK, so we need to check that.
-    This option prevents users from accidentally updating to the new SDK. Switching
-    requires full flash erase, no OTA update possible.
-    """
-    if not config.get(CONF_USE_V2_SDK):
-        raise cv.Invalid(
-            f"This version of the Zigbee component requires {CONF_USE_V2_SDK}=true."
-            " Attention: This requires a full flash erase and re-pairing, no OTA update possible."
-            " If you want to switch back to the old SDK, use the v1.x branch."
-        )
     return config
 
 
@@ -410,12 +389,10 @@ CONFIG_SCHEMA = cv.All(
                 ),
             ),
             cv.Optional(CONF_ON_JOIN): automation.validate_automation({}),
-            cv.Optional(CONF_USE_V2_SDK): cv.boolean,
         }
     ).extend(cv.COMPONENT_SCHEMA),
     cv.require_framework_version(esp_idf=cv.Version(5, 1, 2)),
     _require_vfs_select,
-    _validate_sdk_version,
     only_on_variant(
         supported=[
             VARIANT_ESP32H2,
@@ -560,7 +537,7 @@ async def to_code(config):
     # add_idf_sdkconfig_option("CONFIG_LOG_DYNAMIC_LEVEL_CONTROL", True)
 
     # add partitions for zigbee
-    add_partition("zb_storage", "data", "nvs", 0x4000)  # 16KB
+    # add_partition("zb_storage", "data", "nvs", 0x4000)  # 16KB
     add_partition("zb_fct", "data", "fat", 0x1000)  # 4KB, minimum size
 
     if CONF_WIFI in CORE.config:

@@ -471,7 +471,7 @@ ZigBeeComponent::ZigBeeComponent() {
   }
 #endif
   // ESP_ERROR_CHECK(nvs_flash_init()); not needed, called by esp32 component
-  ESP_ERROR_CHECK(nvs_flash_init_partition(ESP_ZIGBEE_STORAGE_PARTITION_NAME));
+  // ESP_ERROR_CHECK(nvs_flash_init_partition(ESP_ZIGBEE_STORAGE_PARTITION_NAME));
 
   /* initialize Zigbee stack */
   esp_zigbee_platform_config_t platform_config = {

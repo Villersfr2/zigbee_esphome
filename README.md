@@ -1,7 +1,7 @@
 > [!Warning]
 > **Experimental zigbee-sdk v2.0 implementation.**
 >
-> **Breaking Change: needs full flash erase, no OTA update supported!**
+> **Breaking Change: needs re-join!**
 > For issues and limitations see [#96](https://github.com/luar123/zigbee_esphome/issues/96). Please test and report issues. Once stable, this will be merged into master. If you want to stay on v1.x you can use the v1.x branch.
 
 > [!Important]
@@ -101,7 +101,6 @@ zigbee:
   - List of component ids: Add only those. Can be combined with manual definitions in endpoints
 - **as_generic** (Optional, bool): Use generic/basic clusters where possible. Currently sensors and switches. Defaults to false
 - **endpoints** (Optional, list): endpoint list for advanced definitions. See examples
-- **use_v2_sdk** (Optional, bool): Only true is supported by this branch. Use v1.x branch for old sdk.
 
 [Todo]
 
