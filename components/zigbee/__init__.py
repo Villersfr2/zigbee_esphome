@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import inspect
 import logging
@@ -116,6 +117,8 @@ _CALLBACK_AUTOMATIONS = (
 )
 
 comp_ids = 0
+ep_list = []
+ep_done_event = asyncio.Event()
 
 # dummies for upstream compatibility
 BINARY_SENSOR_SCHEMA = cv.Schema({})
@@ -551,6 +554,7 @@ async def to_code(config):
         add_idf_sdkconfig_option("CONFIG_ZB_DEBUG_MODE", True)
 
     # create endpoints
+    global ep_list  # noqa: PLW0603
     ep_list, added_ids = create_ep(config, CORE.config)
     if added_ids:
         # update ESPHOME_COMPONENT_COUNT via pre build script
@@ -597,8 +601,64 @@ async def to_code(config):
                 )
             )
             await attributes_to_code(var, ep[CONF_NUM], cl)
+    ep_done_event.set()
     await automation.build_callback_automations(var, config, _CALLBACK_AUTOMATIONS)
     await add_sdkconfigs(config)
+
+
+async def add_time_clusters(var: ZigBeeComponent) -> int:
+    # add time cluster and attributes if not already added by user
+    await ep_done_event.wait()
+    time_srv_ep = 240
+    time_clnt_ep = 240
+    min_ep = 240
+    for ep in ep_list:
+        has_clnt_time_cluster = False
+        has_srvr_time_cluster = False
+        for cl in ep.get(CONF_CLUSTERS, []):
+            if cl[CONF_ID] == 0x000A or cl[CONF_ID] == CLUSTER_ID["TIME"]:
+                if cl[CONF_ROLE] == "CLIENT":
+                    has_clnt_time_cluster = True
+                    time_clnt_ep = min(time_clnt_ep, ep[CONF_NUM])
+                else:
+                    has_srvr_time_cluster = True
+                    time_srv_ep = min(time_srv_ep, ep[CONF_NUM])
+        if has_clnt_time_cluster and has_srvr_time_cluster:
+            return ep[CONF_NUM]
+        min_ep = min(min_ep, ep[CONF_NUM])
+    if time_srv_ep < time_clnt_ep:
+        cg.add(
+            var.add_cluster(
+                time_srv_ep,
+                0x000A,
+                CLUSTER_ROLE["CLIENT"],
+            )
+        )
+        return time_srv_ep
+    if time_clnt_ep < time_srv_ep:
+        cg.add(
+            var.add_cluster(
+                time_clnt_ep,
+                0x000A,
+                CLUSTER_ROLE["SERVER"],
+            )
+        )
+        return time_clnt_ep
+    cg.add(
+        var.add_cluster(
+            min_ep,
+            0x000A,
+            CLUSTER_ROLE["SERVER"],
+        )
+    )
+    cg.add(
+        var.add_cluster(
+            min_ep,
+            0x000A,
+            CLUSTER_ROLE["CLIENT"],
+        )
+    )
+    return min_ep
 
 
 ZIGBEE_ACTION_SCHEMA = cv.Schema(

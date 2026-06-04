@@ -4,6 +4,7 @@ import esphome.config_validation as cv
 from esphome.const import CONF_ID
 from esphome.cpp_generator import get_variable
 
+from .. import add_time_clusters
 from ..const import CONF_ZIGBEE_ID
 
 DEPENDENCIES = ["zigbee"]
@@ -22,6 +23,7 @@ CONFIG_SCHEMA = time_.TIME_SCHEMA.extend(
 async def to_code(config):
     cg.add_define("USE_ZIGBEE_TIME")
     zb = await get_variable(config[CONF_ZIGBEE_ID])
-    var = cg.new_Pvariable(config[CONF_ID], zb)
+    time_ep = await add_time_clusters(zb)
+    var = cg.new_Pvariable(config[CONF_ID], zb, time_ep)
     await cg.register_component(var, config)
     await time_.register_time(var, config)

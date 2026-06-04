@@ -11,7 +11,7 @@ class ZigBeeComponent;
 
 class ZigbeeTime : public time::RealTimeClock {
  public:
-  ZigbeeTime(ZigBeeComponent *parent) : parent_(parent) {}
+  ZigbeeTime(ZigBeeComponent *parent, uint8_t ep) : parent_(parent), time_ep_(ep) {}
   void setup() override;
   void update() override;
   void set_epoch_time(uint32_t utc);
@@ -21,7 +21,7 @@ class ZigbeeTime : public time::RealTimeClock {
   static uint32_t get_utc_time();
   static void cb(ezb_err_t status);
   bool has_time_{false};
-  uint8_t time_ep_{1};
+  uint8_t time_ep_;
   ZigBeeComponent *parent_;
 };
 
