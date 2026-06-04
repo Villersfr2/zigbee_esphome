@@ -14,7 +14,7 @@
 namespace esphome {
 namespace zigbee {
 
-ZigBeeComponent *global_zigbee;
+static ZigBeeComponent *global_zigbee;
 
 zb_device_params_t coord;
 
@@ -62,7 +62,11 @@ bool ZigBeeComponent::app_signal_handler(const ezb_app_signal_t *app_signal) {
   switch (signal_type) {
     case EZB_ZDO_SIGNAL_SKIP_STARTUP:
       ESP_LOGD(TAG, "Zigbee stack initialized");
-      ezb_bdb_start_top_level_commissioning(EZB_BDB_MODE_INITIALIZATION);
+      if (ezb_bdb_is_factory_new()) {
+        global_zigbee->defer([]() { global_zigbee->setup_reporting(); });
+      } else {
+        ezb_bdb_start_top_level_commissioning(EZB_BDB_MODE_INITIALIZATION);
+      }
       break;
     case EZB_BDB_SIGNAL_DEVICE_FIRST_START:
       // Device started for the first time after the NVRAM erase
@@ -337,42 +341,30 @@ void ZigBeeComponent::handle_attribute(ezb_zcl_message_info_t info, ezb_zcl_attr
 }
 
 void ZigBeeComponent::handle_report_attribute(uint8_t dst_endpoint, uint16_t cluster,
-                                              ezb_zcl_report_attr_variable_t variables, ezb_address_t src_address,
+                                              ezb_zcl_report_attr_variable_t *variables, ezb_address_t src_address,
                                               uint8_t src_endpoint) {
   // TODO loop through all attributes in the report (currently only handles the first one) and find matching attribute
   // handlers for each of them
-  auto attr = this->attributes_.find({dst_endpoint, cluster, EZB_ZCL_CLUSTER_CLIENT, variables.attr_id});
-  if (attr == this->attributes_.end()) {
-    ESP_LOGD(TAG, "No attributes configured for report (endpoint %d; cluster 0x%04x; attribute id 0x%04x)",
-             dst_endpoint, cluster, variables.attr_id);
-    return;
+  while (variables) {
+    auto attr = this->attributes_.find({dst_endpoint, cluster, EZB_ZCL_CLUSTER_CLIENT, variables->attr_id});
+    if (attr == this->attributes_.end()) {
+      ESP_LOGD(TAG, "No attributes configured for report (endpoint %d; cluster 0x%04x; attribute id 0x%04x)",
+               dst_endpoint, cluster, variables->attr_id);
+      return;
+    }
+    attr->second->on_report(variables->attr_value, src_address, src_endpoint);
+    variables = variables->next;
   }
-  attr->second->on_report(variables.attr_value, src_address, src_endpoint);
 }
 
 void ZigBeeComponent::handle_read_attribute_response(ezb_zcl_message_info_t info,
                                                      ezb_zcl_read_attr_rsp_variable_t *variables) {
-  switch (info.cluster_id) {
-    case EZB_ZCL_CLUSTER_ID_TIME:
-      ESP_LOGD(TAG, "Recieved time information");
-#ifdef USE_ZIGBEE_TIME
-      if (this->zt_ == nullptr) {
-        ESP_LOGD(TAG, "No time component linked to update time!");
-      } else {
-        this->zt_->recieve_timesync_response(variables);
-      }
-#else
-      ESP_LOGD(TAG, "No zigbee time component included at build time!");
-#endif
-      break;
-    default:
-      ESP_LOGD(TAG, "Attribute data recieved (but not yet handled):");
-      while (variables) {
-        ESP_LOGD(TAG, "Read attribute response: status(%d), cluster(0x%x), attribute(0x%x), type(0x%x), value(%d)",
-                 variables->status, info.cluster_id, variables->attr_id, variables->attr_type,
-                 variables->attr_value ? *(uint8_t *) variables->attr_value : 0);
-        variables = variables->next;
-      }
+  ESP_LOGD(TAG, "Attribute data recieved (but not yet handled):");
+  while (variables) {
+    ESP_LOGD(TAG, "Read attribute response: status(%d), cluster(0x%x), attribute(0x%x), type(0x%x), value(%d)",
+             variables->status, info.cluster_id, variables->attr_id, variables->attr_type,
+             variables->attr_value ? *(uint8_t *) variables->attr_value : 0);
+    variables = variables->next;
   }
 }
 
@@ -463,6 +455,16 @@ static void ezb_task_(void *pvParameters) {
   vTaskDelete(NULL);
 }
 
+void ZigBeeComponent::setup_reporting() {
+  ESP_LOGD(TAG, "Setting up reporting for all attributes");
+  esp_zigbee_lock_acquire(portMAX_DELAY);
+  for (auto &[_, attribute] : this->attributes_) {
+    attribute->setup_reporting();
+  }
+  ezb_bdb_start_top_level_commissioning(EZB_BDB_MODE_INITIALIZATION);
+  esp_zigbee_lock_release();
+}
+
 ZigBeeComponent::ZigBeeComponent() {
 #ifdef CONFIG_WIFI_COEX
   if (esp_coex_wifi_i154_enable() != ESP_OK) {
@@ -540,18 +542,6 @@ void ZigBeeComponent::setup() {
     this->mark_failed();
     return;
   }
-
-  // reporting
-  for (auto &[_, attribute] : this->attributes_) {
-    if (attribute->report_enabled) {
-      // ezb_zcl_reporting_info_t reporting_info = attribute->get_reporting_info();
-      // ESP_LOGD(TAG, "set reporting for cluster: %u", reporting_info.cluster_id);
-      // if (ezb_zcl_update_reporting_info(&reporting_info) != ESP_OK) {
-      //   ESP_LOGE(TAG, "Could not configure reporting for attribute 0x%04X in cluster 0x%04X in endpoint %u",
-      //            reporting_info.attr_id, reporting_info.cluster_id, reporting_info.ep);
-      // }
-    }
-  }
   xTaskCreate(ezb_task_, "Zigbee_main", 4096, NULL, 24, NULL);
   this->disable_loop();  // loop is only needed for processing events, so disable until we join a network
 }
@@ -573,9 +563,8 @@ void ZigBeeComponent::loop() {
         break;
       case EZB_ZCL_CORE_REPORT_ATTR_CB_ID:
         this->handle_report_attribute(event->event_.report_attr.dst_endpoint, event->event_.report_attr.cluster,
-                                      event->event_.report_attr.variables, event->event_.report_attr.src_address,
+                                      &(event->event_.report_attr.variables), event->event_.report_attr.src_address,
                                       event->event_.report_attr.src_endpoint);
-
         break;
     }
 
@@ -591,9 +580,9 @@ void ZigBeeComponent::loop() {
   }
 
   if (this->joined_) {
-    this->on_join_callback_.call();
     this->joined_ = false;  // only call once
     this->connected_ = true;
+    this->on_join_callback_.call();
   } else if (this->connected_) {
     this->disable_loop();  // only disable once connected
   }

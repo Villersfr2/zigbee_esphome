@@ -45,9 +45,9 @@ class ZigBeeAttribute : public Component {
   void loop() override;
 
   template<typename T> void add_attr(uint8_t attr_access, uint8_t max_size, T value);
-  ezb_zcl_reporting_info_t get_reporting_info();
   void set_report(bool force);
   void report();
+  void setup_reporting();
   template<typename T> void set_attr(const T &value);
 
   uint8_t attr_type() { return attr_type_; }

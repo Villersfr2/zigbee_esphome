@@ -26,11 +26,11 @@ void ZigBeeAttribute::set_attr_() {
 void ZigBeeAttribute::report_() { this->report_(false); }
 
 void ZigBeeAttribute::report_(bool has_lock) {
-  if (!this->zb_->is_connected()) {
+  if (!this->zb_->is_connected() || !this->report_enabled) {
     return;
   }
   if (has_lock or esp_zigbee_lock_acquire(20 / portTICK_PERIOD_MS)) {
-    ezb_zcl_report_attr_cmd_t cmd;
+    ezb_zcl_report_attr_cmd_t cmd = {0};
     cmd.cmd_ctrl.fc.direction = EZB_ZCL_CMD_DIRECTION_TO_CLI;
     cmd.cmd_ctrl.fc.dis_default_rsp = 1;
     cmd.cmd_ctrl.dst_addr.addr_mode = EZB_ADDR_MODE_SHORT;
@@ -38,6 +38,7 @@ void ZigBeeAttribute::report_(bool has_lock) {
     cmd.cmd_ctrl.dst_ep = 1;
     cmd.cmd_ctrl.src_ep = this->endpoint_id_;
     cmd.cmd_ctrl.cluster_id = this->cluster_id_;
+    cmd.cmd_ctrl.fc.manuf_specific = 0;
     cmd.payload.attr_id = this->attr_id_;
 
     ezb_zcl_report_attr_cmd_req(&cmd);
@@ -48,23 +49,23 @@ void ZigBeeAttribute::report_(bool has_lock) {
   }
 }
 
-ezb_zcl_reporting_info_t ZigBeeAttribute::get_reporting_info() {
-  ezb_zcl_reporting_info_t reporting_info;  //= {
-  //     .direction = ESP_ZB_ZCL_CMD_DIRECTION_TO_SRV,
-  //     .ep = this->endpoint_id_,
-  //     .cluster_id = this->cluster_id_,
-  //     .cluster_role = this->role_,
-  //     .attr_id = this->attr_id_,
-  //     .manuf_code = ESP_ZB_ZCL_ATTR_NON_MANUFACTURER_SPECIFIC,
-  // };
-  // reporting_info.dst.profile_id = ESP_ZB_AF_HA_PROFILE_ID;
-  // reporting_info.u.send_info.min_interval = 10;     /*!< Actual minimum reporting interval */
-  // reporting_info.u.send_info.max_interval = 0;      /*!< Actual maximum reporting interval */
-  // reporting_info.u.send_info.def_min_interval = 10; /*!< Default minimum reporting interval */
-  // reporting_info.u.send_info.def_max_interval = 0;  /*!< Default maximum reporting interval */
-  // reporting_info.u.send_info.delta.s16 = 0;         /*!< Actual reportable change */
-
-  return reporting_info;
+void ZigBeeAttribute::setup_reporting() {
+  ezb_zcl_reporting_info_t reporting_info = ezb_zcl_reporting_info_find(
+      this->endpoint_id_, this->cluster_id_, this->role_, this->attr_id_, EZB_ZCL_STD_MANUF_CODE);
+  if (reporting_info == EZB_ZCL_INVALID_REPORTING_INFO) {
+    ESP_LOGW(TAG, "Could not find reporting info for attribute 0x%04X in cluster 0x%04X in endpoint %u", this->attr_id_,
+             this->cluster_id_, this->endpoint_id_);
+    this->report_enabled = false;
+    this->force_report_ = false;
+  } else {
+    ESP_LOGD(TAG, "Found reporting info for attr 0x%04X in cluster 0x%04X", this->attr_id_, this->cluster_id_);
+    ezb_zcl_attr_variable_t delta = {.u64 = 0};
+    ezb_zcl_reporting_info_update_default_interval(reporting_info, 0, 65000);
+    ezb_zcl_reporting_info_update(reporting_info, 0, 65000, &delta);
+    if (ezb_zcl_reporting_start_attr_report(reporting_info) != ESP_OK) {
+      ESP_LOGE(TAG, "Could not start reporting for attribute");
+    }
+  }
 }
 
 void ZigBeeAttribute::set_report(bool force) {
@@ -73,6 +74,9 @@ void ZigBeeAttribute::set_report(bool force) {
 }
 
 void ZigBeeAttribute::report() {
+  if (!this->report_enabled) {
+    return;
+  }
   this->report_requested_ = true;
   this->enable_loop();
 }

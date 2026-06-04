@@ -67,6 +67,7 @@ class ZigBeeComponent : public Component {
   void set_device_version(uint8_t version) { this->device_version_ = version; }
   void add_cluster(uint8_t endpoint_id, uint16_t cluster_id, uint8_t role);
   void create_default_cluster(uint8_t endpoint_id, uint16_t device_id);
+  void setup_reporting();
 
   template<typename T>
   void add_attr(ZigBeeAttribute *attr, uint8_t endpoint_id, uint16_t cluster_id, uint8_t role, uint16_t attr_id,
@@ -77,10 +78,6 @@ class ZigBeeComponent : public Component {
                 uint8_t attr_access, uint8_t max_size, T value);
 
   static bool app_signal_handler(const ezb_app_signal_t *app_signal);
-  void handle_attribute(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute, uint8_t *current_level);
-  void handle_report_attribute(uint8_t dst_endpoint, uint16_t cluster, ezb_zcl_report_attr_variable_t variables,
-                               ezb_address_t src_address, uint8_t src_endpoint);
-  void handle_read_attribute_response(ezb_zcl_message_info_t info, ezb_zcl_read_attr_rsp_variable_t *variables);
   void searchBindings();
   static void bindingTableCb(const ezb_zdo_nwk_mgmt_bind_req_result_t *table_info, void *user_ctx);
   static void esp_zigbee_alarm_bdb_commissioning(ezb_bdb_comm_mode_mask_t mode);
@@ -120,6 +117,10 @@ class ZigBeeComponent : public Component {
   } basic_cluster_data_;
 
  protected:
+  void handle_attribute(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute, uint8_t *current_level);
+  void handle_report_attribute(uint8_t dst_endpoint, uint16_t cluster, ezb_zcl_report_attr_variable_t *variables,
+                               ezb_address_t src_address, uint8_t src_endpoint);
+  void handle_read_attribute_response(ezb_zcl_message_info_t info, ezb_zcl_read_attr_rsp_variable_t *variables);
   template<typename... Args> friend void enqueue_zb_event(Args... args);
   esphome::LockFreeQueue<ZBEvent, MAX_ZB_QUEUE_SIZE> zb_events_;
   esphome::EventPool<ZBEvent, MAX_ZB_QUEUE_SIZE> zb_event_pool_;
