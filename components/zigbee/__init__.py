@@ -175,6 +175,8 @@ def get_c_type(attr_type):
     test = re.match(r"^S(\d{1,2})$", attr_type)
     if test and test.group(1):
         return getattr(cg, "int" + get_c_size(test.group(1), [16, 32, 64]))
+    if attr_type == "UTC":
+        return cg.uint32
     raise EsphomeError(f"Zigbee: type {attr_type} not supported or implemented 1")
 
 
@@ -191,6 +193,8 @@ def get_cv_by_type(attr_type):
     test = re.match(r"^S(\d{1,2})$", attr_type)
     if test and test.group(1):
         return cv.int_
+    if attr_type == "UTC":
+        return cv.uint32_t
     raise cv.Invalid(f"Zigbee: type {attr_type} not supported or implemented 2")
 
 
@@ -201,7 +205,7 @@ def get_default_by_type(attr_type):
 
 
 def validate_clusters(config):
-    for attr in config.get(CONF_ATTRIBUTES):
+    for attr in config.get(CONF_ATTRIBUTES, []):
         if isinstance(config.get(CONF_ID), int) and config.get(CONF_ID) >= 0xFC00:
             if not {CONF_TYPE, CONF_ACCESS, CONF_VALUE} <= attr.keys():
                 raise cv.Invalid(

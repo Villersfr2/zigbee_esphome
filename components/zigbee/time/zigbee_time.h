@@ -7,25 +7,22 @@
 namespace esphome {
 namespace zigbee {
 
-static const uint32_t zigbee_time_offset =
-    946684800; /* Zigbee time is based on counting seconds from 1 Jan 2000 (=946684800) */
-
 class ZigBeeComponent;
 
 class ZigbeeTime : public time::RealTimeClock {
  public:
-  ZigbeeTime(ZigBeeComponent *zc) : zc_(zc) {}
+  ZigbeeTime(ZigBeeComponent *parent) : parent_(parent) {}
   void setup() override;
-  void loop() override;
   void update() override;
-  void set_utc_time(uint32_t utc);
-  void send_timesync_request();
-  void recieve_timesync_response(ezb_zcl_read_attr_resp_variable_t *variable);
+  void set_epoch_time(uint32_t utc);
 
  protected:
-  ZigBeeComponent *zc_;
-  bool synced_;
-  bool requested_;
+  static void set_utc_time(uint32_t utc);
+  static uint32_t get_utc_time();
+  static void cb(ezb_err_t status);
+  bool has_time_{false};
+  uint8_t time_ep_{1};
+  ZigBeeComponent *parent_;
 };
 
 }  // namespace zigbee
