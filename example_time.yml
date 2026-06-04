@@ -6,14 +6,9 @@ external_components:
     components: [zigbee]
 
 esp32:
-  board: esp32-c6-devkitc-1
-  variant: esp32c6
-  flash_size: 8MB
-  partitions: partitions_zb.csv
+  board: esp32-h2-devkitm-1
   framework:
     type: esp-idf
-    sdkconfig_options:
-      CONFIG_ESPTOOLPY_FLASHSIZE_8MB: y
 
 logger:
 
@@ -24,13 +19,17 @@ zigbee:
     - device_type: TEMPERATURE_SENSOR
       num: 1
       clusters:
-        - id: TEMP_MEASUREMENT
+        - id: TEMPERATURE_MEASUREMENT
           attributes:
             - attribute_id: 0x0
-              type: S16
+              type: INT16
               report: true
               id: zb_temp
               value: 0
+        - id: TIME
+          role: server
+        - id: TIME
+          role: client
   on_join:
     then:
       - logger.log: "Joined network"
@@ -39,6 +38,7 @@ time:
   - platform: zigbee
     id: the_time
     timezone: Europe/London
+    update_interval: 90s
     on_time_sync:
       then:
         - logger.log: "Synchronized system clock"
