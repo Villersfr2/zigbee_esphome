@@ -616,7 +616,7 @@ async def add_time_clusters(var: ZigBeeComponent) -> int:
         has_clnt_time_cluster = False
         has_srvr_time_cluster = False
         for cl in ep.get(CONF_CLUSTERS, []):
-            if cl[CONF_ID] == 0x000A or cl[CONF_ID] == CLUSTER_ID["TIME"]:
+            if cl[CONF_ID] == 0x000A or cl[CONF_ID] == "TIME":
                 if cl[CONF_ROLE] == "CLIENT":
                     has_clnt_time_cluster = True
                     time_clnt_ep = min(time_clnt_ep, ep[CONF_NUM])
