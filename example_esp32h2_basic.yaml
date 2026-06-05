@@ -46,7 +46,7 @@ binary_sensor:
         pullup: true
       inverted: true
     id: button_1
-    name: "button1"
+    name: "button 1"
     #on_press:
     #  then:
     #    - zigbee.report: zb

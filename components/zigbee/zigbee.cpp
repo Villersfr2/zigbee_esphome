@@ -11,6 +11,10 @@
 #include "esp_coexist.h"
 #endif
 
+#ifdef CONFIG_PM_ENABLE
+#include "esp_pm.h"
+#include "esp_sleep.h"
+#endif
 namespace esphome {
 namespace zigbee {
 
@@ -475,6 +479,10 @@ ZigBeeComponent::ZigBeeComponent() {
   // ESP_ERROR_CHECK(nvs_flash_init()); not needed, called by esp32 component
   // ESP_ERROR_CHECK(nvs_flash_init_partition(ESP_ZIGBEE_STORAGE_PARTITION_NAME));
 
+#ifdef CONFIG_FREERTOS_USE_TICKLESS_IDLE
+  ESP_LOGD(TAG, "Enabling Zigbee Sleepy End Device: %s", this->sleepy_ ? "enabled" : "disabled");
+  ezb_nwk_set_rx_on_when_idle(!this->sleepy_);  // if sleepy, disable RX when idle to allow sleeping
+#endif
   /* initialize Zigbee stack */
   esp_zigbee_platform_config_t platform_config = {
       .storage_partition_name = ESP_ZIGBEE_STORAGE_PARTITION_NAME,
@@ -492,7 +500,7 @@ ZigBeeComponent::ZigBeeComponent() {
 #else
   esp_zigbee_zed_config_s zb_zed_cfg = {
       .ed_timeout = ED_AGING_TIMEOUT,
-      .keep_alive = ED_KEEP_ALIVE,
+      .keep_alive = this->keep_alive_,
   };
   device_config.zed_config = zb_zed_cfg;
 #endif
@@ -565,6 +573,9 @@ void ZigBeeComponent::loop() {
         this->handle_report_attribute(event->event_.report_attr.dst_endpoint, event->event_.report_attr.cluster,
                                       &(event->event_.report_attr.variables), event->event_.report_attr.src_address,
                                       event->event_.report_attr.src_endpoint);
+        break;
+      default:
+        ESP_LOGW(TAG, "Received event with unhandled callback id: 0x%x", event->callback_id_);
         break;
     }
 

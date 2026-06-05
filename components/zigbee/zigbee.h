@@ -40,7 +40,7 @@ using zdo_info_user_ctx_t = struct ZdoInfoCtxS {
 /* Zigbee configuration */
 #define INSTALLCODE_POLICY_ENABLE false /* enable the install code policy for security */
 #define ED_AGING_TIMEOUT EZB_NWK_ED_TIMEOUT_64MIN
-#define ED_KEEP_ALIVE 3000 /* 3000 millisecond */
+
 #define MAX_CHILDREN 10
 #define EZB_PRIMARY_CHANNEL_MASK (0x07FFF800U)  /* Zigbee primary channel mask use in the example */
 #define ESP_ZIGBEE_STORAGE_PARTITION_NAME "nvs" /* Use default nvs partition */
@@ -63,6 +63,8 @@ class ZigBeeComponent : public Component {
   void set_basic_cluster(std::string model, std::string manufacturer, std::string date, uint8_t power,
                          uint8_t app_version, uint8_t stack_version, uint8_t hw_version, std::string area,
                          uint8_t physical_env);
+  void set_keep_alive(uint16_t keep_alive) { this->keep_alive_ = keep_alive; }
+  void set_sleepy(bool sleepy) { this->sleepy_ = sleepy; }
   void set_trust_center_key(const char *trust_center_key);
   void set_device_version(uint8_t version) { this->device_version_ = version; }
   void add_cluster(uint8_t endpoint_id, uint16_t cluster_id, uint8_t role);
@@ -133,6 +135,8 @@ class ZigBeeComponent : public Component {
   ezb_af_device_desc_t dev_desc_ = ezb_af_create_device_desc();
   uint8_t ident_time_;
   bool custom_trust_center_key_ = false;
+  bool sleepy_ = false;
+  uint16_t keep_alive_ = 3000;
   uint8_t trustkey_[16] = {0};
   uint8_t device_version_ = 0;
 #ifdef ZB_ED_ROLE
