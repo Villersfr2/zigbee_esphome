@@ -470,19 +470,6 @@ void ZigBeeComponent::setup_reporting() {
 }
 
 ZigBeeComponent::ZigBeeComponent() {
-#ifdef CONFIG_WIFI_COEX
-  if (esp_coex_wifi_i154_enable() != ESP_OK) {
-    this->mark_failed();
-    return;
-  }
-#endif
-  // ESP_ERROR_CHECK(nvs_flash_init()); not needed, called by esp32 component
-  // ESP_ERROR_CHECK(nvs_flash_init_partition(ESP_ZIGBEE_STORAGE_PARTITION_NAME));
-
-#ifdef CONFIG_FREERTOS_USE_TICKLESS_IDLE
-  ESP_LOGD(TAG, "Enabling Zigbee Sleepy End Device: %s", this->sleepy_ ? "enabled" : "disabled");
-  ezb_nwk_set_rx_on_when_idle(!this->sleepy_);  // if sleepy, disable RX when idle to allow sleeping
-#endif
   /* initialize Zigbee stack */
   esp_zigbee_platform_config_t platform_config = {
       .storage_partition_name = ESP_ZIGBEE_STORAGE_PARTITION_NAME,
@@ -492,7 +479,7 @@ ZigBeeComponent::ZigBeeComponent() {
       .device_type = this->device_role_,
       .install_code_policy = INSTALLCODE_POLICY_ENABLE,
   };
-#ifdef ZB_ROUTER_ROLE
+#ifdef CONFIG_ZB_ZCZR
   esp_zigbee_zczr_config_s zb_zczr_cfg = {
       .max_children = MAX_CHILDREN,
   };
@@ -513,9 +500,16 @@ ZigBeeComponent::ZigBeeComponent() {
 }
 
 void ZigBeeComponent::setup() {
+#ifdef CONFIG_WIFI_COEX
+  if (esp_coex_wifi_i154_enable() != ESP_OK) {
+    this->mark_failed();
+    return;
+  }
+#endif
+
   global_zigbee = this;
   ezb_aps_secur_enable_distributed_security(false);
-  // ezb_secur_set_tclk_exchange_required(false);
+  ezb_secur_set_tclk_exchange_required(false);
   if (ezb_app_signal_add_handler(this->app_signal_handler) != ESP_OK) {
     ESP_LOGE(TAG, "Could not set application signal handler");
     this->mark_failed();
@@ -550,6 +544,12 @@ void ZigBeeComponent::setup() {
     this->mark_failed();
     return;
   }
+
+#ifdef CONFIG_FREERTOS_USE_TICKLESS_IDLE
+  ESP_LOGD(TAG, "Enabling Zigbee Sleepy End Device: %s", this->sleepy_ ? "enabled" : "disabled");
+  ezb_nwk_set_rx_on_when_idle(!this->sleepy_);  // if sleepy, disable RX when idle to allow sleeping
+#endif
+
   xTaskCreate(ezb_task_, "Zigbee_main", 4096, NULL, 24, NULL);
   this->disable_loop();  // loop is only needed for processing events, so disable until we join a network
 }

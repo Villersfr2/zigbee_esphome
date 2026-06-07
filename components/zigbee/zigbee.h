@@ -139,7 +139,7 @@ class ZigBeeComponent : public Component {
   uint16_t keep_alive_ = 3000;
   uint8_t trustkey_[16] = {0};
   uint8_t device_version_ = 0;
-#ifdef ZB_ED_ROLE
+#ifdef CONFIG_ZB_ZED
   ezb_nwk_device_type_t device_role_ = EZB_NWK_DEVICE_TYPE_END_DEVICE;
 #else
   ezb_nwk_device_type_t device_role_ = EZB_NWK_DEVICE_TYPE_ROUTER;

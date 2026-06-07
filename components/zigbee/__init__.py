@@ -174,10 +174,10 @@ def get_c_type(attr_type):
         return cg.double
     if "STRING" in attr_type:
         return cg.std_string
-    test = re.match(r"^(DATA|UINT|INT|MAP|ENUM)(\d{1,2})$", attr_type)
+    test = re.match(r"^(DATA|UINT|MAP|ENUM)(\d{1,2})$", attr_type)
     if test and test.group(2):
         return getattr(cg, "uint" + get_c_size(test.group(2), [8, 16, 32, 64]))
-    test = re.match(r"^S(\d{1,2})$", attr_type)
+    test = re.match(r"^INT(\d{1,2})$", attr_type)
     if test and test.group(1):
         return getattr(cg, "int" + get_c_size(test.group(1), [16, 32, 64]))
     if attr_type == "UTC":
@@ -192,10 +192,10 @@ def get_cv_by_type(attr_type):
         return cv.float_
     if "STRING" in attr_type:
         return cv.string
-    test = re.match(r"^(DATA|UINT|INT|MAP|ENUM)(\d{1,2})$", attr_type)
+    test = re.match(r"^(DATA|UINT|MAP|ENUM)(\d{1,2})$", attr_type)
     if test and test.group(2):
         return cv.positive_int
-    test = re.match(r"^S(\d{1,2})$", attr_type)
+    test = re.match(r"^INT(\d{1,2})$", attr_type)
     if test and test.group(1):
         return cv.int_
     if attr_type == "UTC":
@@ -204,7 +204,7 @@ def get_cv_by_type(attr_type):
 
 
 def get_default_by_type(attr_type):
-    if "CHAR_STRING" == attr_type:
+    if "STRING" == attr_type:
         return ""
     return 0
 
@@ -220,7 +220,7 @@ def validate_clusters(config):
 
 
 def validate_string_attributes(config):
-    if "CHAR_STRING" == config[CONF_TYPE]:
+    if "STRING" == config[CONF_TYPE]:
         if CONF_MAX_LENGTH not in config.keys():
             raise cv.Invalid(
                 f"The '{CONF_MAX_LENGTH}' parameter is mandatory for string attributes."
