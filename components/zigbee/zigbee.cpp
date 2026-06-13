@@ -204,8 +204,8 @@ void ZigBeeComponent::searchBindings() {
   ezb_zdo_nwk_mgmt_bind_req(mb_req);
 }
 
-void load_zb_event(ZBEvent *event, ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute, uint8_t *current_level) {
-  event->load_set_attr_value_event(info, attribute, current_level);
+void load_zb_event(ZBEvent *event, ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute) {
+  event->load_set_attr_value_event(info, attribute);
 }
 
 void load_zb_event(ZBEvent *event, const ezb_zcl_cmd_report_attr_message_t *message) {
@@ -235,7 +235,7 @@ template<typename... Args> void enqueue_zb_event(Args... args) {
 }
 
 // Explicit template instantiations for the friend function
-template void enqueue_zb_event(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute, uint8_t *current_level);
+template void enqueue_zb_event(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute);
 template void enqueue_zb_event(const ezb_zcl_cmd_report_attr_message_t *message);
 template void enqueue_zb_event(ezb_zcl_message_info_t info, ezb_zcl_read_attr_rsp_variable_t *variables);
 
@@ -246,26 +246,7 @@ static void zb_attribute_handler(ezb_zcl_set_attr_value_message_t *message) {
   ESP_LOGD(TAG, "ZCL SetAttributeValue message for endpoint(%d) cluster(0x%04x) %s with status(0x%02x)",
            message->info.dst_ep, message->info.cluster_id,
            message->info.cluster_role == EZB_ZCL_CLUSTER_SERVER ? "server" : "client", message->info.status);
-
-  // if the attribute is On/Off and it is set to Off, restore the previous level. Todo: still needed?
-  ezb_zcl_attr_desc_t current_level;
-  void *val = nullptr;
-  if (message->info.cluster_id == EZB_ZCL_CLUSTER_ID_ON_OFF) {
-    if (message->in.attribute.id == EZB_ZCL_ATTR_ON_OFF_ON_OFF_ID && !*(bool *) message->in.attribute.data.value) {
-      ESP_LOGD(TAG, "turned off");
-      if (ezb_zcl_get_cluster_desc(message->info.dst_ep, EZB_ZCL_CLUSTER_ID_LEVEL, EZB_ZCL_CLUSTER_SERVER) != NULL) {
-        current_level = ezb_zcl_get_attr_desc(message->info.dst_ep, EZB_ZCL_CLUSTER_ID_LEVEL, EZB_ZCL_CLUSTER_SERVER,
-                                              EZB_ZCL_ATTR_LEVEL_CURRENT_LEVEL_ID, EZB_ZCL_STD_MANUF_CODE);
-        if (current_level) {
-          ESP_LOGD(TAG, "got level");
-          // ezb_zcl_attr_desc_get_value(current_level, val);
-          // ezb_zcl_set_attr_value(message->info.dst_ep, EZB_ZCL_CLUSTER_ID_LEVEL, EZB_ZCL_CLUSTER_SERVER,
-          //                        EZB_ZCL_ATTR_LEVEL_CURRENT_LEVEL_ID, EZB_ZCL_STD_MANUF_CODE, val, false);
-        }
-      }
-    }
-  }
-  enqueue_zb_event(message->info, message->in.attribute, (uint8_t *) val);
+  enqueue_zb_event(message->info, message->in.attribute);
   return;
 }
 
@@ -312,32 +293,46 @@ static void zb_action_handler(ezb_zcl_core_action_callback_id_t callback_id, voi
   }
 }
 
-void ZigBeeComponent::handle_attribute(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute,
-                                       uint8_t *current_level) {
+void ZigBeeComponent::handle_attribute(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute) {
   if (this->attributes_.find({info.dst_ep, info.cluster_id, EZB_ZCL_CLUSTER_SERVER, attribute.id}) !=
       this->attributes_.end()) {
     this->attributes_[{info.dst_ep, info.cluster_id, EZB_ZCL_CLUSTER_SERVER, attribute.id}]->on_value(attribute);
     // if the attribute is On/Off and it is set to Off, restore the previous level
-    if (info.cluster_id == EZB_ZCL_CLUSTER_ID_ON_OFF && current_level != nullptr) {
+    if (info.cluster_id == EZB_ZCL_CLUSTER_ID_ON_OFF) {
       if (attribute.id == EZB_ZCL_ATTR_ON_OFF_ON_OFF_ID && attribute.data.type == EZB_ZCL_ATTR_TYPE_BOOL &&
           !*(bool *) attribute.data.value) {
         ESP_LOGD(TAG, "turned off");
-        if (this->attributes_.find({info.dst_ep, EZB_ZCL_CLUSTER_ID_LEVEL, EZB_ZCL_CLUSTER_SERVER,
-                                    EZB_ZCL_ATTR_LEVEL_CURRENT_LEVEL_ID}) != this->attributes_.end()) {
-          ESP_LOGD(TAG, "found level");
+        // if the attribute is On/Off and it is set to Off, restore the previous level. Todo: still needed?
+        uint8_t val = 0;
+        esp_zigbee_lock_acquire(portMAX_DELAY);  // Todo: limit time?
+        if (ezb_zcl_get_cluster_desc(info.dst_ep, EZB_ZCL_CLUSTER_ID_LEVEL, EZB_ZCL_CLUSTER_SERVER) != NULL) {
+          ezb_zcl_attr_desc_t current_level =
+              ezb_zcl_get_attr_desc(info.dst_ep, EZB_ZCL_CLUSTER_ID_LEVEL, EZB_ZCL_CLUSTER_SERVER,
+                                    EZB_ZCL_ATTR_LEVEL_CURRENT_LEVEL_ID, EZB_ZCL_STD_MANUF_CODE);
+          if (current_level) {
+            ESP_LOGD(TAG, "got level");
+            ezb_zcl_attr_desc_get_value(current_level, &val);
+            // ezb_zcl_set_attr_value(message->info.dst_ep, EZB_ZCL_CLUSTER_ID_LEVEL, EZB_ZCL_CLUSTER_SERVER,
+            //                        EZB_ZCL_ATTR_LEVEL_CURRENT_LEVEL_ID, EZB_ZCL_STD_MANUF_CODE, val, false);
+          }
+        }
+        esp_zigbee_lock_release();
+        if (val && this->attributes_.find({info.dst_ep, EZB_ZCL_CLUSTER_ID_LEVEL, EZB_ZCL_CLUSTER_SERVER,
+                                           EZB_ZCL_ATTR_LEVEL_CURRENT_LEVEL_ID}) != this->attributes_.end()) {
+          ESP_LOGD(TAG, "found level attr");
           ezb_zcl_attribute_t lvl_attr = {
               .id = EZB_ZCL_ATTR_LEVEL_CURRENT_LEVEL_ID,
               .data =
                   {
                       .type = EZB_ZCL_ATTR_TYPE_UINT8,
                       .size = sizeof(uint8_t),
-                      .value = current_level,
+                      .value = &val,
                   },
           };
           this->attributes_[{info.dst_ep, EZB_ZCL_CLUSTER_ID_LEVEL, EZB_ZCL_CLUSTER_SERVER,
                              EZB_ZCL_ATTR_LEVEL_CURRENT_LEVEL_ID}]
               ->on_value(lvl_attr);
-          ESP_LOGD(TAG, "Light set to restore-level: %d", *current_level);
+          ESP_LOGD(TAG, "Light set to restore-level: %d", val);
         }
       }
     }
@@ -561,9 +556,7 @@ void ZigBeeComponent::loop() {
     // Handle the event
     switch (event->callback_id_) {
       case EZB_ZCL_CORE_SET_ATTR_VALUE_CB_ID:
-        this->handle_attribute(
-            event->event_.set_attr.info, event->event_.set_attr.attribute,
-            event->event_.set_attr.has_current_level ? &event->event_.set_attr.current_level : nullptr);
+        this->handle_attribute(event->event_.set_attr.info, event->event_.set_attr.attribute);
         break;
       case EZB_ZCL_CORE_READ_ATTR_RSP_CB_ID:
         this->handle_read_attribute_response(event->event_.read_attr_resp.info,

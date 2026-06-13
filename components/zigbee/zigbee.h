@@ -119,7 +119,7 @@ class ZigBeeComponent : public Component {
   } basic_cluster_data_;
 
  protected:
-  void handle_attribute(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute, uint8_t *current_level);
+  void handle_attribute(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute);
   void handle_report_attribute(uint8_t dst_endpoint, uint16_t cluster, ezb_zcl_report_attr_variable_t *variables,
                                ezb_address_t src_address, uint8_t src_endpoint);
   void handle_read_attribute_response(ezb_zcl_message_info_t info, ezb_zcl_read_attr_rsp_variable_t *variables);

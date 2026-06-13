@@ -11,9 +11,9 @@ namespace esphome::zigbee {
 
 class ZBEvent {
  public:
-  ZBEvent(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute, uint8_t *current_level) {
+  ZBEvent(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute) {
     this->callback_id_ = EZB_ZCL_CORE_SET_ATTR_VALUE_CB_ID;
-    this->init_set_attr_value_data(info, attribute, current_level);
+    this->init_set_attr_value_data(info, attribute);
   }
 
   ZBEvent(const ezb_zcl_cmd_report_attr_message_t *message) {
@@ -65,10 +65,10 @@ class ZBEvent {
     }
   }
 
-  void load_set_attr_value_event(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute, uint8_t *current_level) {
+  void load_set_attr_value_event(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute) {
     this->release();
     this->callback_id_ = EZB_ZCL_CORE_SET_ATTR_VALUE_CB_ID;
-    this->init_set_attr_value_data(info, attribute, current_level);
+    this->init_set_attr_value_data(info, attribute);
   }
 
   void load_report_attr_event(const ezb_zcl_cmd_report_attr_message_t *message) {
@@ -91,8 +91,6 @@ class ZBEvent {
     struct set_attr_event {
       ezb_zcl_message_info_t info;
       ezb_zcl_attribute_t attribute;
-      uint8_t current_level;
-      bool has_current_level;
       uint8_t inline_data[4];  // For small data types
     } set_attr;
     struct report_attr_event {
@@ -113,14 +111,10 @@ class ZBEvent {
   ezb_zcl_core_action_callback_id_t callback_id_;
 
  private:
-  void init_set_attr_value_data(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute, uint8_t *current_level) {
+  void init_set_attr_value_data(ezb_zcl_message_info_t info, ezb_zcl_attribute_t attribute) {
     this->event_.set_attr.info = info;
     this->event_.set_attr.attribute = attribute;
     // get attribute.data.value with correct type
-    this->event_.set_attr.has_current_level = (current_level != nullptr);
-    if (current_level != nullptr) {
-      this->event_.set_attr.current_level = *current_level;
-    }
     if (attribute.data.value != nullptr) {
       // Copy the attribute value to avoid dangling pointer issues
       size_t value_size = ezb_zcl_get_attr_value_size(attribute.data.type, attribute.data.value);
