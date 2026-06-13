@@ -319,7 +319,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_VERSION, default=0): cv.int_,
             cv.Optional(CONF_AREA, default=0): cv.int_,  # make enum
             cv.Optional(CONF_ROUTER, default=False): cv.boolean,
-            cv.Optional(CONF_TRUST_CENTER_KEY): cv.bind_key,
+            # cv.Optional(CONF_TRUST_CENTER_KEY): cv.bind_key,
             cv.Optional(CONF_DEVICE_VERSION): cv.int_,
             cv.Optional(CONF_DEBUG, default=False): cv.boolean,
             cv.Optional(CONF_SLEEPY): cv.boolean,
