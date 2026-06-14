@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import datetime
 import inspect
@@ -120,7 +122,16 @@ _CALLBACK_AUTOMATIONS = (
 
 comp_ids = 0
 ep_list = []
-ep_done_event = asyncio.Event()
+_ep_done_event: asyncio.Event | None = None
+
+
+def _get_ep_done_event() -> asyncio.Event:
+    """Get or create the ep_done_event, ensuring it has a running event loop."""
+    global _ep_done_event  # noqa: PLW0603
+    if _ep_done_event is None:
+        _ep_done_event = asyncio.Event()
+    return _ep_done_event
+
 
 # dummies for upstream compatibility
 BINARY_SENSOR_SCHEMA = cv.Schema({})
@@ -617,14 +628,14 @@ async def to_code(config):
                 )
             )
             await attributes_to_code(var, ep[CONF_NUM], cl)
-    ep_done_event.set()
+    _get_ep_done_event().set()
     await automation.build_callback_automations(var, config, _CALLBACK_AUTOMATIONS)
     await add_sdkconfigs(config)
 
 
 async def add_time_clusters(var: ZigBeeComponent) -> int:
     # add time cluster and attributes if not already added by user
-    await ep_done_event.wait()
+    await _get_ep_done_event().wait()
     time_srv_ep = 240
     time_clnt_ep = 240
     min_ep = 240
