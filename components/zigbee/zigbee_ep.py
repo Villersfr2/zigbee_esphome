@@ -617,7 +617,7 @@ def create_ep(config, full_conf):
     if not ep_list:
         ep_list = [
             {
-                CONF_DEVICE_TYPE: "CUSTOM_ATTR",
+                CONF_DEVICE_TYPE: 0xFFF2,
                 CONF_NUM: 1,
             }
         ]
