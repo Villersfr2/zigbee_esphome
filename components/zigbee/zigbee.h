@@ -83,6 +83,7 @@ class ZigBeeComponent : public Component {
   void searchBindings();
   static void bindingTableCb(const ezb_zdo_nwk_mgmt_bind_req_result_t *table_info, void *user_ctx);
   static void esp_zigbee_alarm_bdb_commissioning(ezb_bdb_comm_mode_mask_t mode);
+  void register_device();
 
   void reset() {
     esp_zigbee_lock_acquire(portMAX_DELAY);

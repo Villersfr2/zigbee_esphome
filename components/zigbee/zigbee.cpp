@@ -67,7 +67,8 @@ bool ZigBeeComponent::app_signal_handler(const ezb_app_signal_t *app_signal) {
     case EZB_ZDO_SIGNAL_SKIP_STARTUP:
       ESP_LOGD(TAG, "Zigbee stack initialized");
       if (ezb_bdb_is_factory_new()) {
-        global_zigbee->defer([]() { global_zigbee->setup_reporting(); });
+        // global_zigbee->defer([]() { global_zigbee->setup_reporting(); });
+        ezb_bdb_start_top_level_commissioning(EZB_BDB_MODE_INITIALIZATION);
       } else {
         ezb_bdb_start_top_level_commissioning(EZB_BDB_MODE_INITIALIZATION);
       }
@@ -440,7 +441,17 @@ void ZigBeeComponent::update_basic_cluster_(ezb_af_ep_desc_t ep_desc) {
   ezb_af_endpoint_add_cluster_desc(ep_desc, cluster_desc);
 }
 
+void ZigBeeComponent::register_device() {
+  // ------------------------------ Register Device ------------------------------
+  if (ezb_af_device_desc_register(this->dev_desc_) != EZB_ERR_NONE) {
+    ESP_LOGE(TAG, "Could not register the endpoint list");
+    this->mark_failed();
+    return;
+  }
+}
+
 static void ezb_task_(void *pvParameters) {
+  global_zigbee->register_device();
   if (esp_zigbee_start(false) != ESP_OK) {
     ESP_LOGE(TAG, "Could not setup Zigbee");
     // this->mark_failed();
@@ -525,13 +536,6 @@ void ZigBeeComponent::setup() {
     }
   }
 
-  // ------------------------------ Register Device ------------------------------
-  if (ezb_af_device_desc_register(this->dev_desc_) != EZB_ERR_NONE) {
-    ESP_LOGE(TAG, "Could not register the endpoint list");
-    this->mark_failed();
-    return;
-  }
-
   ezb_zcl_core_action_handler_register(zb_action_handler);
 
   if (ezb_bdb_set_primary_channel_set(EZB_PRIMARY_CHANNEL_MASK) != ESP_OK) {
@@ -539,6 +543,8 @@ void ZigBeeComponent::setup() {
     this->mark_failed();
     return;
   }
+
+  ezb_nwk_set_min_join_lqi(32);
 
 #ifdef CONFIG_FREERTOS_USE_TICKLESS_IDLE
   ESP_LOGD(TAG, "Enabling Zigbee Sleepy End Device: %s", this->sleepy_ ? "enabled" : "disabled");
