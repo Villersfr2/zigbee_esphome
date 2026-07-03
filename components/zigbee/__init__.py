@@ -41,6 +41,7 @@ from esphome.const import (
     CONF_VALUE,
     CONF_VERSION,
     CONF_WIFI,
+    Toolchain,
 )
 from esphome.core import CORE, EsphomeError
 from esphome.coroutine import CoroPriority, coroutine_with_priority
@@ -272,6 +273,10 @@ def validate_attributes(config):
 
 
 def final_validate(config):
+    if CORE.toolchain != Toolchain.PLATFORMIO:
+        raise cv.Invalid(
+            "Zigbee is only supported with PlatformIO toolchain. Please switch to PlatformIO."
+        )
     esp_conf = fv.full_config.get()["esp32"]
     if CONF_PARTITIONS in esp_conf:
         with open(
