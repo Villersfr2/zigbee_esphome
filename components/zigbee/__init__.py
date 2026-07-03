@@ -558,7 +558,7 @@ async def add_sdkconfigs(config):
 async def to_code(config):
     add_idf_component(
         name="espressif/esp-zigbee-lib",
-        ref="2.0.1",
+        ref="2.0.2",
     )
 
     add_idf_sdkconfig_option("CONFIG_ZB_ENABLED", True)
@@ -633,9 +633,10 @@ async def to_code(config):
     await add_sdkconfigs(config)
 
 
+@coroutine_with_priority(CoroPriority.LATE)
 async def add_time_clusters(var: ZigBeeComponent) -> int:
     # add time cluster and attributes if not already added by user
-    await _get_ep_done_event().wait()
+    # await _get_ep_done_event().wait()
     time_srv_ep = 240
     time_clnt_ep = 240
     min_ep = 240
