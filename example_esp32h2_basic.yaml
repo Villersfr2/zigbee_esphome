@@ -7,12 +7,15 @@ external_components:
 
 esp32:
   board: esp32-h2-devkitm-1
+  toolchain: platformio
   framework:
     type: esp-idf
+    # log_level: DEBUG
 
 # Enable logging
 logger:
   hardware_uart: USB_SERIAL_JTAG
+  #hardware_uart: UART0
 
 sensor:
   - platform: internal_temperature
@@ -24,6 +27,7 @@ sensor:
 zigbee:
   id: "zb"
   components: all
+  debug: false
   on_join:
     then:
       - logger.log: "Joined network"
