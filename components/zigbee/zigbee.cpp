@@ -66,12 +66,7 @@ bool ZigBeeComponent::app_signal_handler(const ezb_app_signal_t *app_signal) {
   switch (signal_type) {
     case EZB_ZDO_SIGNAL_SKIP_STARTUP:
       ESP_LOGD(TAG, "Zigbee stack initialized");
-      if (ezb_bdb_is_factory_new()) {
-        // global_zigbee->defer([]() { global_zigbee->setup_reporting(); });
-        ezb_bdb_start_top_level_commissioning(EZB_BDB_MODE_INITIALIZATION);
-      } else {
-        ezb_bdb_start_top_level_commissioning(EZB_BDB_MODE_INITIALIZATION);
-      }
+      ezb_bdb_start_top_level_commissioning(EZB_BDB_MODE_INITIALIZATION);
       break;
     case EZB_BDB_SIGNAL_DEVICE_FIRST_START:
       // Device started for the first time after the NVRAM erase
@@ -458,6 +453,10 @@ static void ezb_task_(void *pvParameters) {
     vTaskDelete(NULL);
   }
 
+  // Increase priority to example default. 5 is also used for openthread component and BLE
+  // Todo: Verify this is ok, wifi runs at 23.
+  vTaskPrioritySet(NULL, 5);
+
   esp_zigbee_launch_mainloop();
 
   esp_zigbee_deinit();
@@ -550,8 +549,8 @@ void ZigBeeComponent::setup() {
   ESP_LOGD(TAG, "Enabling Zigbee Sleepy End Device: %s", this->sleepy_ ? "enabled" : "disabled");
   ezb_nwk_set_rx_on_when_idle(!this->sleepy_);  // if sleepy, disable RX when idle to allow sleeping
 #endif
-
-  xTaskCreate(ezb_task_, "Zigbee_main", 4096, NULL, 24, NULL);
+  // create task with priority 1 to ensure main loop can still run even if Zigbee is busy
+  xTaskCreate(ezb_task_, "Zigbee_main", 4096, NULL, 1, NULL);
   this->disable_loop();  // loop is only needed for processing events, so disable until we join a network
 }
 
