@@ -21,7 +21,7 @@ This is tested on ESP32-H2 and ESP32-C6, however, is in theory also compatible w
 ## Features
 
 - Automated generation of zigbee definition for lights, switches, sensors and binary sensors (see basic mode)
-- Definition of endpoints, clusters and attributes supported by esp-zigbee-sdk 1.6
+- Definition of endpoints, clusters and attributes supported by esp-zigbee-sdk 2.0
 - Set attributes action
 - Manual report action
 - Reset zigbee action
@@ -43,12 +43,10 @@ This is tested on ESP32-H2 and ESP32-C6, however, is in theory also compatible w
 - Attribute OnValue trigger works only with numeric types
 - Reporting can be enabled, but not configured
 - No control devices like switches ([workaround](https://github.com/luar123/zigbee_esphome/discussions/18#discussioncomment-11875376))
-- Needs esp-idf >=5.1.4
-- Needs esphome >=2025.7
+- Needs esp-idf >=5.5.4
+- Needs esphome >=2026.6
 - scenes not implemented
 - Officially the zigbee stack supports only 10 endpoints. however, this is not enforced and at least for sensor endpoints more than 10 seem to work. More then 10 light endpoints will crash!
-- zigbee2mqtt: Only one light is supported without creating a custom converter/definition
-- zigbee2mqtt: Analog input cluster (used for sensors) is supported by 2025 October release, but ignores type and unit
 - ZHA: Analog input cluster (used for sensors) without unit/type is ignored
 - ZHA: Minimum reporting interval is set to high values (30s) for some sensors and can't be changed. Keep that in mind if reporting seems not to work properly.
 
@@ -109,6 +107,7 @@ zigbee:
 By adding `components: all` the endpoint definition is generated automatically. Currently [sensor](https://esphome.io/components/sensor/), [binary_sensor](https://esphome.io/components/binary_sensor/), [light](https://esphome.io/components/light/) and [switch](https://esphome.io/components/switch/) ESPHome components are supported.
 Because this is an [external component](https://esphome.io/components/external_components/) the whole implementation is a bit hacky and likely to fail with some setups. Also it is not possible to tweak the generated definitions.
 Each entity creates a new endpoint. For sensors the unit/type is set automatically. Please note that these definitions are not complete. Feel free to open an issue or pull request (see zigbee_ep.py)
+Basic mode requires platformio toolchain.
 
 | ESPHome Entity  | Zigbee Cluster                                                     |
 | --------------- | ------------------------------------------------------------------ |

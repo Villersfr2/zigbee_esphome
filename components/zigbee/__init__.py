@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import inspect
 import logging
 from pathlib import Path
 import re
@@ -15,7 +14,9 @@ from esphome.components.esp32 import (
     add_extra_script,
     add_idf_component,
     add_idf_sdkconfig_option,
+    add_partition,
     only_on_variant,
+    require_vfs_select,
 )
 from esphome.components.esp32.const import (
     VARIANT_ESP32C5,
@@ -84,36 +85,7 @@ from .types import (
 from .zigbee_const import ATTR_ACCESS, ATTR_TYPE, CLUSTER_ID, CLUSTER_ROLE, DEVICE_ID
 from .zigbee_ep import create_ep
 
-try:
-    from esphome.components.esp32 import require_vfs_select
-except ImportError:
-
-    def require_vfs_select():
-        pass
-
-
-try:
-    from esphome.components.esp32 import add_partition
-except ImportError:
-
-    def add_partition(*args, **kwargs):
-        pass
-
-
 _LOGGER = logging.getLogger(__name__)
-
-_supports_synchronous = (
-    "synchronous" in inspect.signature(automation.register_action).parameters
-)
-
-
-def _register_action(name, action_type, schema, **kwargs):
-    if _supports_synchronous:
-        kwargs.setdefault("synchronous", True)
-    else:
-        kwargs.pop("synchronous", None)
-    return automation.register_action(name, action_type, schema, **kwargs)
-
 
 DEPENDENCIES = ["esp32"]
 
@@ -434,7 +406,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_ON_JOIN): automation.validate_automation({}),
         }
     ).extend(cv.COMPONENT_SCHEMA),
-    cv.require_framework_version(esp_idf=cv.Version(5, 1, 2)),
+    cv.require_framework_version(esp_idf=cv.Version(5, 5, 4)),
     _require_vfs_select,
     only_on_variant(
         supported=[
@@ -705,7 +677,7 @@ ZIGBEE_ACTION_SCHEMA = cv.Schema(
 )
 
 
-@_register_action(
+@automation.register_action(
     "zigbee.reset",
     ResetZigbeeAction,
     automation.maybe_simple_id(ZIGBEE_ACTION_SCHEMA),
@@ -717,7 +689,7 @@ async def reset_zigbee_to_code(config, action_id, template_arg, args):
     return var
 
 
-@_register_action(
+@automation.register_action(
     "zigbee.report",
     ReportAction,
     automation.maybe_simple_id(ZIGBEE_ACTION_SCHEMA),
@@ -748,7 +720,7 @@ ZIGBEE_SET_ATTR_SCHEMA = cv.All(
 )
 
 
-@_register_action(
+@automation.register_action(
     "zigbee.setAttr", SetAttrAction, ZIGBEE_SET_ATTR_SCHEMA, synchronous=True
 )
 async def zigbee_set_attr_to_code(config, action_id, template_arg, args):
@@ -770,7 +742,7 @@ async def zigbee_set_attr_to_code(config, action_id, template_arg, args):
     return var
 
 
-@_register_action(
+@automation.register_action(
     "zigbee.reportAttr",
     ReportAttrAction,
     automation.maybe_simple_id(ZIGBEE_ATTRIBUTE_ACTION_SCHEMA),
