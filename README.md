@@ -1,8 +1,8 @@
 > [!Warning]
-> **Experimental zigbee-sdk v2.0 implementation.**
+> **zigbee-sdk v2.0 implementation.**
 >
 > **Breaking Change: needs re-join!**
-> For issues and limitations see [#96](https://github.com/luar123/zigbee_esphome/issues/96). Please test and report issues. Once stable, this will be merged into master. If you want to stay on v1.x you can use the v1.x branch.
+> For issues and limitations see [#96](https://github.com/luar123/zigbee_esphome/issues/96). Please test and report issues. If you want to stay on v1.x you can use the v1.x branch.
 
 > [!Important]
 > **Please help to collect working cluster definitions [here](https://github.com/luar123/zigbee_esphome/discussions/22).**
@@ -13,7 +13,7 @@
 
 External Zigbee component for ESPHome.
 
-- v2 branch is based on Espressif's self-developed proprietary Zigbee stack (used by ESP Zigbee SDK 2.0).
+- master branch is based on Espressif's self-developed proprietary Zigbee stack (used by ESP Zigbee SDK 2.0).
 - v1.x branch was based on the ZBOSS Zigbee stack (used by ESP Zigbee SDK 1.x).
 
 This is tested on ESP32-H2 and ESP32-C6, however, is in theory also compatible with all ESP32 models with a 802.15.4 radio, which includes ESP32-H2, ESP32-C5, ESP32-C6, ESP32-H4, ESP32-H21, ESP32-S31 (but only once those are supported by ESPHome and Espressif ESP Zigbee SDK 2.0).
