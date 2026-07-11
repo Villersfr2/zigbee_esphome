@@ -273,9 +273,13 @@ def validate_attributes(config):
 
 
 def final_validate(config):
-    if CORE.toolchain != Toolchain.PLATFORMIO:
+    if (
+        config.get(CONF_COMPONENTS)
+        and config[CONF_COMPONENTS] != "none"
+        and CORE.toolchain != Toolchain.PLATFORMIO
+    ):
         raise cv.Invalid(
-            "Zigbee is only supported with PlatformIO toolchain. Please switch to PlatformIO."
+            "Zigbee basic mode is only supported with PlatformIO toolchain. Please switch to PlatformIO."
         )
     esp_conf = fv.full_config.get()["esp32"]
     if CONF_PARTITIONS in esp_conf:
