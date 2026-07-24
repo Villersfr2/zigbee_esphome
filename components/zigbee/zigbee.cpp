@@ -338,8 +338,6 @@ void ZigBeeComponent::handle_attribute(ezb_zcl_message_info_t info, ezb_zcl_attr
 void ZigBeeComponent::handle_report_attribute(uint8_t dst_endpoint, uint16_t cluster,
                                               ezb_zcl_report_attr_variable_t *variables, ezb_address_t src_address,
                                               uint8_t src_endpoint) {
-  // TODO loop through all attributes in the report (currently only handles the first one) and find matching attribute
-  // handlers for each of them
   while (variables) {
     auto attr = this->attributes_.find({dst_endpoint, cluster, EZB_ZCL_CLUSTER_CLIENT, variables->attr_id});
     if (attr == this->attributes_.end()) {
@@ -347,7 +345,7 @@ void ZigBeeComponent::handle_report_attribute(uint8_t dst_endpoint, uint16_t clu
                dst_endpoint, cluster, variables->attr_id);
       return;
     }
-    attr->second->on_report(variables->attr_value, src_address, src_endpoint);
+    attr->second->on_report(variables->attr_value, variables->attr_type, src_address, src_endpoint);
     variables = variables->next;
   }
 }

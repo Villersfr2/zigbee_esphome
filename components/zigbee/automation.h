@@ -85,16 +85,16 @@ template<typename T> class ZigBeeOnReportTrigger : public Trigger<ZigBeeReportDa
   explicit ZigBeeOnReportTrigger(ZigBeeAttribute *parent) : parent_(parent) {}
   void setup() override {
     this->parent_->add_on_report_callback(
-        [this](ezb_zcl_attribute_t attribute, ezb_address_t src_address, uint8_t src_endpoint) {
-          this->on_report_(attribute, src_address, src_endpoint);
+        [this](void *value, uint8_t attr_type, ezb_address_t src_address, uint8_t src_endpoint) {
+          this->on_report_(value, attr_type, src_address, src_endpoint);
         });
   }
 
  protected:
-  void on_report_(ezb_zcl_attribute_t attribute, ezb_address_t src_address, uint8_t src_endpoint) {
-    if (attribute.data.type == parent_->attr_type() && attribute.data.value) {
+  void on_report_(void *value, uint8_t attr_type, ezb_address_t src_address, uint8_t src_endpoint) {
+    if (attr_type == parent_->attr_type() && value) {
       this->trigger(ZigBeeReportData<T>{
-          .value = get_value_by_type<T>(parent_->attr_type(), attribute.data.value),
+          .value = get_value_by_type<T>(parent_->attr_type(), value),
           .src_address = src_address,
           .src_endpoint = src_endpoint,
       });

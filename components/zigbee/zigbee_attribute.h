@@ -56,12 +56,9 @@ class ZigBeeAttribute : public Component {
   void on_value(ezb_zcl_attribute_t attribute) { this->on_value_callback_.call(attribute); }
 
   // TODO handle void pointer
-  void add_on_report_callback(
-      std::function<void(void *value, ezb_address_t src_address, uint8_t src_endpoint)> callback) {
-    on_report_callback_.add(std::move(callback));
-  }
-  void on_report(void *value, ezb_address_t src_address, uint8_t src_endpoint) {
-    this->on_report_callback_.call(value, src_address, src_endpoint);
+  template<typename F> void add_on_report_callback(F &&callback) { on_report_callback_.add(std::forward<F>(callback)); }
+  void on_report(void *value, uint8_t attr_type, ezb_address_t src_address, uint8_t src_endpoint) {
+    this->on_report_callback_.call(value, attr_type, src_address, src_endpoint);
   }
   bool report_enabled = false;
 
@@ -98,7 +95,8 @@ class ZigBeeAttribute : public Component {
   uint8_t max_size_;
   float scale_;
   CallbackManager<void(ezb_zcl_attribute_t attribute)> on_value_callback_{};
-  CallbackManager<void(void *value, ezb_address_t src_address, uint8_t src_endpoint)> on_report_callback_{};
+  CallbackManager<void(void *value, uint8_t attr_type, ezb_address_t src_address, uint8_t src_endpoint)>
+      on_report_callback_{};
   void *value_p{nullptr};
   bool set_attr_requested_{false};
   bool report_requested_{false};
