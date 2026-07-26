@@ -77,6 +77,7 @@ bool ZigBeeComponent::app_signal_handler(const ezb_app_signal_t *app_signal) {
         ESP_LOGD(TAG, "Device started up in %sfactory-reset mode", ezb_bdb_is_factory_new() ? "" : "non ");
         global_zigbee->started_ = true;
         if (ezb_bdb_is_factory_new()) {
+          global_zigbee->factory_new_ = true;
           ESP_LOGD(TAG, "Start network steering");
           ezb_bdb_start_top_level_commissioning(EZB_BDB_MODE_NETWORK_STEERING);
         } else {
@@ -147,7 +148,8 @@ void ZigBeeComponent::bindingTableCb(const ezb_zdo_nwk_mgmt_bind_req_result_t *r
     if (result->rsp->binding_table_entries == 0) {
       ESP_LOGD(TAG, "No binding table entries found");
       free(req);
-      global_zigbee->connected_ = true;
+      global_zigbee->joined_ = true;
+      global_zigbee->enable_loop_soon_any_context();
       return;
     }
 
@@ -186,7 +188,8 @@ void ZigBeeComponent::bindingTableCb(const ezb_zdo_nwk_mgmt_bind_req_result_t *r
     // Print bound devices
     ESP_LOGD(TAG, "Filling bounded devices finished");
     free(req);
-    global_zigbee->connected_ = true;
+    global_zigbee->joined_ = true;
+    global_zigbee->enable_loop_soon_any_context();
   }
 }
 
@@ -587,10 +590,9 @@ void ZigBeeComponent::loop() {
     ESP_LOGW(TAG, "Dropped %u Zigbee events due to buffer overflow", dropped);
   }
 
-  if (this->joined_) {
-    this->joined_ = false;  // only call once
+  if (this->joined_.exchange(false)) {
     this->connected_ = true;
-    this->on_join_callback_.call();
+    this->on_join_callback_.call(this->factory_new_);
   } else if (this->connected_) {
     this->disable_loop();  // only disable once connected
   }

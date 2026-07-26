@@ -101,11 +101,12 @@ class ZigBeeComponent : public Component {
 
   bool is_started() { return this->started_; }
   bool is_connected() { return this->connected_; }
-  bool connected_ = false;
-  bool started_ = false;
-  bool joined_ = false;
+  std::atomic<bool> connected_ = false;
+  std::atomic<bool> started_ = false;
+  std::atomic<bool> joined_ = false;
+  std::atomic<bool> factory_new_ = false;
 
-  CallbackManager<void()> on_join_callback_{};
+  CallbackManager<void(bool)> on_join_callback_{};
   struct {
     std::string model;
     std::string manufacturer;

@@ -90,7 +90,7 @@ _LOGGER = logging.getLogger(__name__)
 DEPENDENCIES = ["esp32"]
 
 _CALLBACK_AUTOMATIONS = (
-    automation.CallbackAutomation(CONF_ON_JOIN, "add_on_join_callback"),
+    automation.CallbackAutomation(CONF_ON_JOIN, "add_on_join_callback", [(bool, "x")]),
 )
 
 comp_ids = 0
