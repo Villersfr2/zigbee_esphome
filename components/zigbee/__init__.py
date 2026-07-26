@@ -571,12 +571,11 @@ async def to_code(config):
         )
 
     # setup zigbee components
-    var = cg.new_Pvariable(config[CONF_ID])
+    var = cg.new_Pvariable(config[CONF_ID], config[CONF_KEEP_ALIVE])
     await cg.register_component(var, config)
 
     if CONF_SLEEPY in config:
         cg.add(var.set_sleepy(config[CONF_SLEEPY]))
-    cg.add(var.set_keep_alive(config[CONF_KEEP_ALIVE]))
     if CONF_TRUST_CENTER_KEY in config:
         cg.add(var.set_trust_center_key(config[CONF_TRUST_CENTER_KEY]))
     if CONF_DEVICE_VERSION in config:

@@ -472,7 +472,8 @@ void ZigBeeComponent::setup_reporting() {
   esp_zigbee_lock_release();
 }
 
-ZigBeeComponent::ZigBeeComponent() {
+ZigBeeComponent::ZigBeeComponent(uint16_t keep_alive) {
+  this->keep_alive_ = keep_alive;
   /* initialize Zigbee stack */
   esp_zigbee_platform_config_t platform_config = {
       .storage_partition_name = ESP_ZIGBEE_STORAGE_PARTITION_NAME,

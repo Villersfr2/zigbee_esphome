@@ -56,14 +56,13 @@ class ZigbeeTime;
 
 class ZigBeeComponent : public Component {
  public:
-  ZigBeeComponent();
+  ZigBeeComponent(uint16_t keep_alive);
   void setup() override;
   void loop() override;
   void dump_config() override;
   void set_basic_cluster(std::string model, std::string manufacturer, std::string date, uint8_t power,
                          uint8_t app_version, uint8_t stack_version, uint8_t hw_version, std::string area,
                          uint8_t physical_env);
-  void set_keep_alive(uint16_t keep_alive) { this->keep_alive_ = keep_alive; }
   void set_sleepy(bool sleepy) { this->sleepy_ = sleepy; }
   void set_trust_center_key(const char *trust_center_key);
   void set_device_version(uint8_t version) { this->device_version_ = version; }
