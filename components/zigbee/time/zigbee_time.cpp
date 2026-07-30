@@ -12,18 +12,28 @@ ZigbeeTime *global_time = nullptr;  // NOLINT(cppcoreguidelines-avoid-non-const-
 
 void ZigbeeTime::setup() {
   global_time = this;
+  this->parent_->add_on_join_callback([this](bool x) { this->register_zb_time(); });
+}
+
+void ZigbeeTime::register_zb_time() {
   ezb_zcl_time_interface_t time_interface = {
       .get_utc_time = this->get_utc_time,
       .set_utc_time = this->set_utc_time,
   };
-  ezb_zcl_time_server_interface_register(this->time_ep_, time_interface);
-  this->parent_->add_on_join_callback([this](bool x) { this->update(); });
+  ezb_err_t ret;
+  ret = ezb_zcl_time_server_interface_register(this->time_ep_, time_interface);
+  if (ret != EZB_ERR_NONE) {
+    ESP_LOGW(TAG, "Setup failed: %u", ret);
+    this->mark_failed();
+    return;
+  }
   ESP_LOGD(TAG, "Using Zigbee network as time source");
+  this->update();
 }
 
 void ZigbeeTime::cb(ezb_err_t status) {
   if (status == EZB_ERR_NONE) {
-    ESP_LOGI(TAG, "Time synchronization successful");
+    ESP_LOGD(TAG, "Time synchronization successful");
   } else if (status == EZB_ERR_TIMEOUT) {
     ESP_LOGW(TAG, "Time synchronization timed out");
   } else {
@@ -49,14 +59,14 @@ void ZigbeeTime::update() {
 uint32_t ZigbeeTime::get_utc_time() { return (uint32_t) (global_time->timestamp_now() - EPOCH_2000); }
 
 void ZigbeeTime::set_utc_time(uint32_t utc) {
-  ESP_LOGI(TAG, "Received time synchronization request with UTC time: %u", utc + EPOCH_2000);
+  ESP_LOGD(TAG, "Received time synchronization request with UTC time: %u", utc + EPOCH_2000);
   global_time->set_epoch_time(utc + EPOCH_2000);
 }
 
 void ZigbeeTime::set_epoch_time(uint32_t utc) {
   // called from zigbee task, defer to main loop
   this->defer([this, utc]() {
-    ESP_LOGI(TAG, "Setting device time to UTC: %u", utc);
+    ESP_LOGD(TAG, "Setting device time to UTC: %u", utc);
     this->synchronize_epoch_(utc);
     this->has_time_ = true;
   });
