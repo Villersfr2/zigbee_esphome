@@ -551,6 +551,18 @@ void ZigBeeComponent::setup() {
   ESP_LOGD(TAG, "Enabling Zigbee Sleepy End Device: %s", this->sleepy_ ? "enabled" : "disabled");
   ezb_nwk_set_rx_on_when_idle(!this->sleepy_);  // if sleepy, disable RX when idle to allow sleeping
 #endif
+
+  uint8_t power_source = static_cast<uint8_t>(this->basic_cluster_data_.power == EZB_ZCL_BASIC_POWER_SOURCE_BATTERY
+                                                  ? EZB_AF_NODE_POWER_SOURCE_RECHARGEABLE_BATTERY
+                                                  : EZB_AF_NODE_POWER_SOURCE_CONSTANT_POWER);
+  ezb_af_node_power_desc_t desc = {
+      .current_power_mode = EZB_AF_NODE_POWER_MODE_SYNC_ON_WHEN_IDLE,
+      .available_power_sources = power_source,
+      .current_power_source = power_source,
+      .current_power_source_level = EZB_AF_NODE_POWER_SOURCE_LEVEL_100_PERCENT,
+  };
+  ezb_af_set_node_power_desc(&desc);
+
   // create task with priority 1 to ensure main loop can still run even if Zigbee is busy
   xTaskCreate(ezb_task_, "Zigbee_main", 4096, NULL, 1, NULL);
   this->disable_loop();  // loop is only needed for processing events, so disable until we join a network
