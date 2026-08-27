@@ -30,6 +30,8 @@ class PowerManagementComponent : public Component {
   uint32_t sleep_debug_interval_ms_{10000};
   uint32_t last_debug_ms_{0};
   uint64_t last_awake_us_{0};
+  uint64_t last_sleep_total_us_{0};
+  uint32_t last_sleep_entries_{0};
 };
 
 }  // namespace power_management
