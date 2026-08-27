@@ -96,7 +96,8 @@ void PowerManagementComponent::configure_pm_() {
 
     ESP_LOGI(TAG, "Automatic light sleep enabled at %d MHz (start delay: %lu ms)", cpu_freq_mhz,
              (unsigned long) this->start_delay_ms_);
-    ESP_LOGI(TAG, "[SLEEP TEST] Light sleep will run for 120 seconds, then be disabled automatically and the final result printed");
+    ESP_LOGI(TAG, "[SLEEP TEST] Light sleep will run for 120 seconds, then be disabled automatically");
+    ESP_LOGI(TAG, "[SLEEP TEST] After wake, stored result will repeat every 10 seconds for 2 minutes");
     if (this->power_down_peripherals_) {
       ESP_LOGI(TAG, "Peripheral clocks/power domains are managed automatically by ESP-IDF light sleep");
     }
@@ -136,13 +137,22 @@ void PowerManagementComponent::configure_pm_() {
 #endif
 }
 
+void PowerManagementComponent::print_stored_test_result_() {
+  ESP_LOGW(TAG, "============================================================");
+  ESP_LOGW(TAG, "[SLEEP TEST COMPLETE] automatic light sleep is OFF");
+  ESP_LOGW(TAG, "[SLEEP TEST RESULT] duration=%.3f s | entries=%lu | sleep=%.3f s | awake=%.3f s | sleep_ratio=%.1f%% | last_sleep=%.3f ms",
+           this->result_elapsed_us_ / 1000000.0, (unsigned long) this->result_entries_,
+           this->result_sleep_us_ / 1000000.0, this->result_awake_us_ / 1000000.0,
+           this->result_ratio_, this->result_last_sleep_us_ / 1000.0);
+  ESP_LOGW(TAG, "[SLEEP TEST] This stored result repeats every 10 s so you can reconnect USB serial manually");
+  ESP_LOGW(TAG, "============================================================");
+}
+
 void PowerManagementComponent::stop_test_and_report_() {
 #if defined(CONFIG_PM_ENABLE) && CONFIG_PM_LIGHT_SLEEP_CALLBACKS
   if (!this->pm_configured_ || this->test_finished_)
     return;
 
-  // Disable automatic light sleep first. This intentionally restores a continuously-awake
-  // CPU so USB Serial/JTAG has a chance to become usable again before printing the result.
   const int cpu_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
   esp_pm_config_t awake_config = {
       .max_freq_mhz = cpu_freq_mhz,
@@ -154,24 +164,28 @@ void PowerManagementComponent::stop_test_and_report_() {
   this->pm_configured_ = false;
 
   const uint64_t end_us = esp_timer_get_time();
-  const uint64_t elapsed_us = end_us - this->test_start_us_;
-  const uint64_t sleep_us = s_sleep_total_us;
-  const uint64_t awake_us = elapsed_us > sleep_us ? elapsed_us - sleep_us : 0;
-  const float ratio = elapsed_us > 0 ? (100.0f * static_cast<float>(sleep_us) / static_cast<float>(elapsed_us)) : 0.0f;
+  this->result_elapsed_us_ = end_us - this->test_start_us_;
+  this->result_sleep_us_ = s_sleep_total_us;
+  this->result_awake_us_ = this->result_elapsed_us_ > this->result_sleep_us_ ? this->result_elapsed_us_ - this->result_sleep_us_ : 0;
+  this->result_entries_ = s_sleep_entries;
+  this->result_last_sleep_us_ = s_last_sleep_us;
+  this->result_ratio_ = this->result_elapsed_us_ > 0
+                            ? (100.0f * static_cast<float>(this->result_sleep_us_) / static_cast<float>(this->result_elapsed_us_))
+                            : 0.0f;
 
-  // Give USB Serial/JTAG two seconds awake before emitting the stored summary.
-  this->set_timeout("sleep_test_report", 2000, [err, elapsed_us, sleep_us, awake_us, ratio]() {
-    ESP_LOGW(TAG, "============================================================");
-    ESP_LOGW(TAG, "[SLEEP TEST COMPLETE] automatic light sleep is now OFF");
-    ESP_LOGW(TAG, "[SLEEP TEST RESULT] duration=%.3f s | entries=%lu | sleep=%.3f s | awake=%.3f s | sleep_ratio=%.1f%% | last_sleep=%.3f ms",
-             elapsed_us / 1000000.0, (unsigned long) s_sleep_entries, sleep_us / 1000000.0,
-             awake_us / 1000000.0, ratio, s_last_sleep_us / 1000.0);
+  // First report after 2 s, then every 10 s for two minutes (12 additional reports).
+  this->set_timeout("sleep_test_first_report", 2000, [this, err]() {
     ESP_LOGW(TAG, "[SLEEP TEST] esp_pm_configure(light_sleep=false): %s", esp_err_to_name(err));
+    this->print_stored_test_result_();
     dump_zigbee_sleep_state_();
     ESP_LOGW(TAG, "[PM LOCKS] Final power-management lock dump follows:");
     esp_pm_dump_locks(stdout);
-    ESP_LOGW(TAG, "============================================================");
   });
+
+  for (uint32_t i = 1; i <= 12; i++) {
+    const uint32_t delay_ms = 10000 * i;
+    this->set_timeout(delay_ms, [this]() { this->print_stored_test_result_(); });
+  }
 #endif
 }
 
@@ -186,9 +200,8 @@ void PowerManagementComponent::loop() {
     return;
   }
 
-  // Do not emit periodic logs during the 120 s test: USB logging itself can disturb sleep.
-  // The callbacks accumulate all sleep statistics in RAM and the final report is printed
-  // only after automatic light sleep has been disabled.
+  // No periodic logs during the 120 s measurement. The callbacks accumulate
+  // sleep statistics in RAM; reporting begins only after light sleep is disabled.
 #endif
 }
 
@@ -199,7 +212,7 @@ void PowerManagementComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "  Start delay: %lu ms", (unsigned long) this->start_delay_ms_);
   ESP_LOGCONFIG(TAG, "  Sleep debug: %s", YESNO(this->sleep_debug_));
   if (this->sleep_debug_)
-    ESP_LOGCONFIG(TAG, "  Test mode: 120 s sleep, then automatic wake/report");
+    ESP_LOGCONFIG(TAG, "  Test mode: 120 s sleep, then result every 10 s for 2 min");
 }
 
 }  // namespace power_management
