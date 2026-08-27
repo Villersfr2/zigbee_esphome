@@ -4,6 +4,10 @@
 
 #include "esphome/core/component.h"
 
+#ifdef CONFIG_PM_ENABLE
+#include "esp_timer.h"
+#endif
+
 namespace esphome {
 namespace power_management {
 
@@ -19,6 +23,9 @@ class PowerManagementComponent : public Component {
   void set_sleep_debug(bool enable) { this->sleep_debug_ = enable; }
   void set_sleep_debug_interval(uint32_t interval_ms) { this->sleep_debug_interval_ms_ = interval_ms; }
 
+  // Called by the native ESP-IDF one-shot timer after it wakes automatic light sleep.
+  void finish_sleep_test_from_timer();
+
  protected:
   void configure_pm_();
   void stop_test_and_report_();
@@ -33,11 +40,11 @@ class PowerManagementComponent : public Component {
   uint32_t sleep_debug_interval_ms_{10000};
   uint32_t test_duration_ms_{120000};
   uint32_t pm_start_ms_{0};
-  uint32_t last_debug_ms_{0};
-  uint64_t last_awake_us_{0};
   uint64_t test_start_us_{0};
-  uint64_t last_sleep_total_us_{0};
-  uint32_t last_sleep_entries_{0};
+
+#ifdef CONFIG_PM_ENABLE
+  esp_timer_handle_t test_timer_{nullptr};
+#endif
 
   uint64_t result_elapsed_us_{0};
   uint64_t result_sleep_us_{0};
