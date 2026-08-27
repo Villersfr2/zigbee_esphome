@@ -22,6 +22,7 @@ class PowerManagementComponent : public Component {
  protected:
   void configure_pm_();
   void stop_test_and_report_();
+  void print_stored_test_result_();
 
   bool enable_light_sleep_{true};
   bool power_down_peripherals_{true};
@@ -37,6 +38,13 @@ class PowerManagementComponent : public Component {
   uint64_t test_start_us_{0};
   uint64_t last_sleep_total_us_{0};
   uint32_t last_sleep_entries_{0};
+
+  uint64_t result_elapsed_us_{0};
+  uint64_t result_sleep_us_{0};
+  uint64_t result_awake_us_{0};
+  int64_t result_last_sleep_us_{0};
+  uint32_t result_entries_{0};
+  float result_ratio_{0.0f};
 };
 
 }  // namespace power_management
