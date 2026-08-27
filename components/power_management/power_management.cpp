@@ -8,6 +8,7 @@
 #include "esp_err.h"
 #include "esp_timer.h"
 #include "sdkconfig.h"
+#include <stdio.h>
 #endif
 
 namespace esphome {
@@ -21,7 +22,6 @@ static volatile uint32_t s_sleep_entries = 0;
 static volatile int64_t s_last_sleep_us = 0;
 
 static esp_err_t pm_sleep_enter_cb(int64_t expected_sleep_time_us, void *arg) {
-  // Do not log here: callbacks run from the IDLE task and logging would perturb sleep.
   (void) expected_sleep_time_us;
   (void) arg;
   return ESP_OK;
@@ -85,6 +85,8 @@ void PowerManagementComponent::configure_pm_() {
 #else
       ESP_LOGW(TAG, "Sleep debug requested but CONFIG_PM_LIGHT_SLEEP_CALLBACKS is disabled");
 #endif
+      ESP_LOGW(TAG, "[PM LOCKS] Initial power-management lock dump follows:");
+      esp_pm_dump_locks(stdout);
     }
   } else {
     ESP_LOGE(TAG, "esp_pm_configure failed: %s", esp_err_to_name(err));
@@ -124,6 +126,13 @@ void PowerManagementComponent::loop() {
            "[SLEEP STATS] entries=%lu | sleep=%.3f s | awake=%.3f s | sleep_ratio=%.1f%% | last_sleep=%.3f ms | total_entries=%lu | total_sleep=%.1f s",
            (unsigned long) delta_entries, delta_sleep_us / 1000000.0, awake_us / 1000000.0, sleep_ratio,
            last_sleep_us / 1000.0, (unsigned long) sleep_entries, sleep_total_us / 1000000.0);
+
+  // If no light-sleep entry occurred in this reporting interval, dump the PM locks.
+  // This identifies the subsystem holding ESP_PM_NO_LIGHT_SLEEP/APB/CPU locks.
+  if (delta_entries == 0) {
+    ESP_LOGW(TAG, "[PM LOCKS] No light sleep detected; active PM locks follow:");
+    esp_pm_dump_locks(stdout);
+  }
 
   this->last_debug_ms_ = now_ms;
   this->last_awake_us_ = now_us;
