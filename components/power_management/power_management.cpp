@@ -8,6 +8,7 @@
 #include "esp_err.h"
 #include "esp_timer.h"
 #include "sdkconfig.h"
+#include "ezbee/nwk.h"
 #include <stdio.h>
 #endif
 
@@ -37,6 +38,14 @@ static esp_err_t pm_sleep_exit_cb(int64_t actual_sleep_time_us, void *arg) {
   return ESP_OK;
 }
 #endif
+
+static void dump_zigbee_sleep_state_() {
+  const bool rx_on = ezb_nwk_get_rx_on_when_idle();
+  const ezb_shortaddr_t short_addr = ezb_nwk_get_short_address();
+  const bool joined = short_addr != EZB_NWK_ADDR_UNKNOWN;
+  ESP_LOGW(TAG, "[ZIGBEE SLEEP] joined=%s | short_addr=0x%04x | sleepy=%s | rx_on_when_idle=%s",
+           YESNO(joined), short_addr, YESNO(!rx_on), rx_on ? "TRUE" : "FALSE");
+}
 
 void PowerManagementComponent::setup() {
   if (!this->enable_light_sleep_) {
@@ -85,6 +94,7 @@ void PowerManagementComponent::configure_pm_() {
 #else
       ESP_LOGW(TAG, "Sleep debug requested but CONFIG_PM_LIGHT_SLEEP_CALLBACKS is disabled");
 #endif
+      dump_zigbee_sleep_state_();
       ESP_LOGW(TAG, "[PM LOCKS] Initial power-management lock dump follows:");
       esp_pm_dump_locks(stdout);
     }
@@ -127,9 +137,8 @@ void PowerManagementComponent::loop() {
            (unsigned long) delta_entries, delta_sleep_us / 1000000.0, awake_us / 1000000.0, sleep_ratio,
            last_sleep_us / 1000.0, (unsigned long) sleep_entries, sleep_total_us / 1000000.0);
 
-  // If no light-sleep entry occurred in this reporting interval, dump the PM locks.
-  // This identifies the subsystem holding ESP_PM_NO_LIGHT_SLEEP/APB/CPU locks.
   if (delta_entries == 0) {
+    dump_zigbee_sleep_state_();
     ESP_LOGW(TAG, "[PM LOCKS] No light sleep detected; active PM locks follow:");
     esp_pm_dump_locks(stdout);
   }
