@@ -33,6 +33,11 @@ CONFIG_SCHEMA = cv.Schema(
 async def to_code(config):
     add_idf_sdkconfig_option("CONFIG_PM_ENABLE", True)
     add_idf_sdkconfig_option("CONFIG_FREERTOS_USE_TICKLESS_IDLE", True)
+    # ESP-IDF exposes entry/exit callbacks for automatic light sleep when this
+    # option is enabled. We use the exit callback to accumulate the actual
+    # sleep duration without logging from the IDLE task.
+    if config[CONF_SLEEP_DEBUG]:
+        add_idf_sdkconfig_option("CONFIG_PM_LIGHT_SLEEP_CALLBACKS", True)
 
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
