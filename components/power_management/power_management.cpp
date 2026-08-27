@@ -47,6 +47,17 @@ static void dump_zigbee_sleep_state_() {
            YESNO(joined), short_addr, YESNO(!rx_on), rx_on ? "TRUE" : "FALSE");
 }
 
+static void enforce_zigbee_sleepy_() {
+  const ezb_shortaddr_t short_addr = ezb_nwk_get_short_address();
+  const bool joined = short_addr != EZB_NWK_ADDR_UNKNOWN;
+  const bool rx_on = ezb_nwk_get_rx_on_when_idle();
+  if (joined && rx_on) {
+    ESP_LOGW(TAG, "[ZIGBEE SLEEP] Stack restored rx_on_when_idle=TRUE after startup; forcing FALSE for sleepy end device");
+    ezb_nwk_set_rx_on_when_idle(false);
+    ESP_LOGI(TAG, "[ZIGBEE SLEEP] rx_on_when_idle is now %s", ezb_nwk_get_rx_on_when_idle() ? "TRUE" : "FALSE");
+  }
+}
+
 void PowerManagementComponent::setup() {
   if (!this->enable_light_sleep_) {
     ESP_LOGI(TAG, "Automatic light sleep disabled");
@@ -58,6 +69,11 @@ void PowerManagementComponent::setup() {
 void PowerManagementComponent::configure_pm_() {
 #ifdef CONFIG_PM_ENABLE
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
+  // The Zigbee stack can restore RxOnWhenIdle from persisted network state after
+  // ZigBeeComponent::setup() initially configured it. Re-apply sleepy behavior
+  // after the network has had time to restore/join, immediately before PM starts.
+  enforce_zigbee_sleepy_();
+
   const int cpu_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
   esp_pm_config_t pm_config = {
       .max_freq_mhz = cpu_freq_mhz,
@@ -138,6 +154,8 @@ void PowerManagementComponent::loop() {
            last_sleep_us / 1000.0, (unsigned long) sleep_entries, sleep_total_us / 1000000.0);
 
   if (delta_entries == 0) {
+    // If Zigbee changed RxOnWhenIdle again, repair it and report the state.
+    enforce_zigbee_sleepy_();
     dump_zigbee_sleep_state_();
     ESP_LOGW(TAG, "[PM LOCKS] No light sleep detected; active PM locks follow:");
     esp_pm_dump_locks(stdout);
