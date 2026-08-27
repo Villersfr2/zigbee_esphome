@@ -53,19 +53,14 @@ static esp_err_t pm_sleep_exit_cb(int64_t actual_sleep_time_us, void *arg) {
 }
 #endif
 
-static bool load_and_clear_result_(StoredSleepResult *result) {
+static bool load_result_(StoredSleepResult *result) {
   nvs_handle_t handle;
-  if (nvs_open(NVS_NS, NVS_READWRITE, &handle) != ESP_OK)
+  if (nvs_open(NVS_NS, NVS_READONLY, &handle) != ESP_OK)
     return false;
   size_t len = sizeof(*result);
   esp_err_t err = nvs_get_blob(handle, "result", result, &len);
-  const bool valid = err == ESP_OK && len == sizeof(*result) && result->magic == RESULT_MAGIC;
-  if (valid) {
-    nvs_erase_key(handle, "result");
-    nvs_commit(handle);
-  }
   nvs_close(handle);
-  return valid;
+  return err == ESP_OK && len == sizeof(*result) && result->magic == RESULT_MAGIC;
 }
 
 static bool save_result_(const StoredSleepResult &result) {
@@ -101,20 +96,24 @@ static void enforce_zigbee_sleepy_() {
 void PowerManagementComponent::setup() {
 #ifdef CONFIG_PM_ENABLE
   StoredSleepResult stored{};
-  if (load_and_clear_result_(&stored)) {
-    const float ratio = stored.elapsed_us > 0
-                            ? (100.0f * static_cast<float>(stored.sleep_us) / static_cast<float>(stored.elapsed_us))
-                            : 0.0f;
-    ESP_LOGW(TAG, "============================================================");
-    ESP_LOGW(TAG, "[SLEEP TEST RESULT FROM PREVIOUS BOOT]");
-    ESP_LOGW(TAG, "duration=%.3f s | entries=%lu | sleep=%.3f s | awake=%.3f s | sleep_ratio=%.1f%% | last_sleep=%.3f ms",
-             stored.elapsed_us / 1000000.0, (unsigned long) stored.entries,
-             stored.sleep_us / 1000000.0, stored.awake_us / 1000000.0,
-             ratio, stored.last_sleep_us / 1000.0);
-    ESP_LOGW(TAG, "Result was read from NVS and cleared. This boot will NOT start another sleep test.");
-    ESP_LOGW(TAG, "============================================================");
+  if (load_result_(&stored)) {
+    this->result_elapsed_us_ = stored.elapsed_us;
+    this->result_sleep_us_ = stored.sleep_us;
+    this->result_awake_us_ = stored.awake_us;
+    this->result_last_sleep_us_ = stored.last_sleep_us;
+    this->result_entries_ = stored.entries;
+    this->result_ratio_ = stored.elapsed_us > 0
+                              ? (100.0f * static_cast<float>(stored.sleep_us) / static_cast<float>(stored.elapsed_us))
+                              : 0.0f;
+
     this->test_finished_ = true;
     this->enable_light_sleep_ = false;
+
+    ESP_LOGW(TAG, "[SLEEP TEST] Saved result found in NVS. Light sleep will stay OFF so USB remains available.");
+    this->print_stored_test_result_();
+
+    // Keep the result in NVS and repeat forever. The user can reconnect USB serial at any time.
+    this->set_interval("sleep_saved_result", 10000, [this]() { this->print_stored_test_result_(); });
     return;
   }
 #endif
@@ -151,8 +150,8 @@ void PowerManagementComponent::configure_pm_() {
 #endif
     ESP_LOGI(TAG, "Automatic light sleep enabled at %d MHz (start delay: %lu ms)", cpu_freq_mhz,
              (unsigned long) this->start_delay_ms_);
-    ESP_LOGI(TAG, "[SLEEP TEST] Measuring for 120 seconds. At the end the result is saved to NVS and the ESP32 restarts automatically.");
-    ESP_LOGI(TAG, "[SLEEP TEST] After reboot, reconnect USB serial and the stored result will be printed before sleep is re-enabled.");
+    ESP_LOGI(TAG, "[SLEEP TEST] Measuring for 120 seconds. Result will be saved to NVS, then ESP32 will restart.");
+    ESP_LOGI(TAG, "[SLEEP TEST] After reboot the saved result repeats every 10 seconds indefinitely; reconnect USB whenever you want.");
     if (this->power_down_peripherals_)
       ESP_LOGI(TAG, "Peripheral clocks/power domains are managed automatically by ESP-IDF light sleep");
 
@@ -187,7 +186,16 @@ void PowerManagementComponent::configure_pm_() {
 #endif
 }
 
-void PowerManagementComponent::print_stored_test_result_() {}
+void PowerManagementComponent::print_stored_test_result_() {
+  ESP_LOGW(TAG, "============================================================");
+  ESP_LOGW(TAG, "[SLEEP TEST SAVED RESULT]");
+  ESP_LOGW(TAG, "duration=%.3f s | entries=%lu | sleep=%.3f s | awake=%.3f s | sleep_ratio=%.1f%% | last_sleep=%.3f ms",
+           this->result_elapsed_us_ / 1000000.0, (unsigned long) this->result_entries_,
+           this->result_sleep_us_ / 1000000.0, this->result_awake_us_ / 1000000.0,
+           this->result_ratio_, this->result_last_sleep_us_ / 1000.0);
+  ESP_LOGW(TAG, "Result remains stored in NVS and repeats every 10 seconds. Light sleep is OFF on this boot.");
+  ESP_LOGW(TAG, "============================================================");
+}
 
 void PowerManagementComponent::stop_test_and_report_() {
 #if defined(CONFIG_PM_ENABLE) && CONFIG_PM_LIGHT_SLEEP_CALLBACKS
@@ -206,12 +214,9 @@ void PowerManagementComponent::stop_test_and_report_() {
   this->test_finished_ = true;
   this->pm_configured_ = false;
 
-  // Saving happens once at the end of the diagnostic test, not during sleep cycles.
-  // Then force a software reset so USB Serial/JTAG is reinitialized cleanly.
   if (save_result_(result)) {
     esp_restart();
   } else {
-    // If NVS failed, do not reboot into an endless test loop. Stay awake and report the failure.
     const int cpu_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
     esp_pm_config_t awake_config = {
         .max_freq_mhz = cpu_freq_mhz,
@@ -241,7 +246,7 @@ void PowerManagementComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "  Start delay: %lu ms", (unsigned long) this->start_delay_ms_);
   ESP_LOGCONFIG(TAG, "  Sleep debug: %s", YESNO(this->sleep_debug_));
   if (this->sleep_debug_)
-    ESP_LOGCONFIG(TAG, "  Test mode: 120 s sleep -> NVS -> software reset -> report on next boot");
+    ESP_LOGCONFIG(TAG, "  Test mode: 120 s sleep -> NVS -> reboot -> saved result every 10 s indefinitely");
 }
 
 }  // namespace power_management
