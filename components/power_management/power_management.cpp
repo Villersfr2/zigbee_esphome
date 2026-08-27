@@ -53,6 +53,13 @@ static esp_err_t pm_sleep_exit_cb(int64_t actual_sleep_time_us, void *arg) {
 }
 #endif
 
+#ifdef CONFIG_PM_ENABLE
+static void sleep_test_timer_cb_(void *arg) {
+  auto *component = static_cast<PowerManagementComponent *>(arg);
+  component->finish_sleep_test_from_timer();
+}
+#endif
+
 static bool load_result_(StoredSleepResult *result) {
   nvs_handle_t handle;
   if (nvs_open(NVS_NS, NVS_READONLY, &handle) != ESP_OK)
@@ -105,14 +112,10 @@ void PowerManagementComponent::setup() {
     this->result_ratio_ = stored.elapsed_us > 0
                               ? (100.0f * static_cast<float>(stored.sleep_us) / static_cast<float>(stored.elapsed_us))
                               : 0.0f;
-
     this->test_finished_ = true;
     this->enable_light_sleep_ = false;
-
     ESP_LOGW(TAG, "[SLEEP TEST] Saved result found in NVS. Light sleep will stay OFF so USB remains available.");
     this->print_stored_test_result_();
-
-    // Keep the result in NVS and repeat forever. The user can reconnect USB serial at any time.
     this->set_interval("sleep_saved_result", 10000, [this]() { this->print_stored_test_result_(); });
     return;
   }
@@ -130,50 +133,72 @@ void PowerManagementComponent::configure_pm_() {
 #if CONFIG_FREERTOS_USE_TICKLESS_IDLE
   enforce_zigbee_sleepy_();
 
+#if CONFIG_PM_LIGHT_SLEEP_CALLBACKS
+  s_sleep_total_us = 0;
+  s_sleep_entries = 0;
+  s_last_sleep_us = 0;
+
+  esp_pm_sleep_cbs_register_config_t cbs = {};
+  cbs.enter_cb = pm_sleep_enter_cb;
+  cbs.exit_cb = pm_sleep_exit_cb;
+  cbs.enter_cb_user_arg = this;
+  cbs.exit_cb_user_arg = this;
+  esp_err_t cb_err = esp_pm_light_sleep_register_cbs(&cbs);
+  if (cb_err != ESP_OK) {
+    ESP_LOGE(TAG, "Could not register light-sleep callbacks: %s", esp_err_to_name(cb_err));
+    this->mark_failed();
+    return;
+  }
+#endif
+
+  // Native ESP-IDF one-shot timer. Automatic PM light sleep treats a pending esp_timer
+  // as a wake deadline and wakes the chip in time to dispatch this callback.
+  esp_timer_create_args_t timer_args = {};
+  timer_args.callback = &sleep_test_timer_cb_;
+  timer_args.arg = this;
+  timer_args.dispatch_method = ESP_TIMER_TASK;
+  timer_args.name = "pm_test_end";
+  timer_args.skip_unhandled_events = false;  // Important: this timer MUST wake light sleep.
+
+  esp_err_t timer_err = esp_timer_create(&timer_args, &this->test_timer_);
+  if (timer_err != ESP_OK) {
+    ESP_LOGE(TAG, "Could not create 120 s wake timer: %s", esp_err_to_name(timer_err));
+    this->mark_failed();
+    return;
+  }
+
+  timer_err = esp_timer_start_once(this->test_timer_, static_cast<uint64_t>(this->test_duration_ms_) * 1000ULL);
+  if (timer_err != ESP_OK) {
+    ESP_LOGE(TAG, "Could not start 120 s wake timer: %s", esp_err_to_name(timer_err));
+    esp_timer_delete(this->test_timer_);
+    this->test_timer_ = nullptr;
+    this->mark_failed();
+    return;
+  }
+
+  this->test_start_us_ = esp_timer_get_time();
+  this->pm_start_ms_ = millis();
+  this->test_finished_ = false;
+
   const int cpu_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
   esp_pm_config_t pm_config = {
       .max_freq_mhz = cpu_freq_mhz,
       .min_freq_mhz = cpu_freq_mhz,
       .light_sleep_enable = true,
   };
-
   esp_err_t err = esp_pm_configure(&pm_config);
   if (err == ESP_OK) {
     this->pm_configured_ = true;
-    this->test_finished_ = false;
-    this->pm_start_ms_ = millis();
-    this->test_start_us_ = esp_timer_get_time();
-#if CONFIG_PM_LIGHT_SLEEP_CALLBACKS
-    s_sleep_total_us = 0;
-    s_sleep_entries = 0;
-    s_last_sleep_us = 0;
-#endif
-    ESP_LOGI(TAG, "Automatic light sleep enabled at %d MHz (start delay: %lu ms)", cpu_freq_mhz,
-             (unsigned long) this->start_delay_ms_);
-    ESP_LOGI(TAG, "[SLEEP TEST] Measuring for 120 seconds. Result will be saved to NVS, then ESP32 will restart.");
-    ESP_LOGI(TAG, "[SLEEP TEST] After reboot the saved result repeats every 10 seconds indefinitely; reconnect USB whenever you want.");
-    if (this->power_down_peripherals_)
-      ESP_LOGI(TAG, "Peripheral clocks/power domains are managed automatically by ESP-IDF light sleep");
-
-    if (this->sleep_debug_) {
-#if CONFIG_PM_LIGHT_SLEEP_CALLBACKS
-      esp_pm_sleep_cbs_register_config_t cbs = {};
-      cbs.enter_cb = pm_sleep_enter_cb;
-      cbs.exit_cb = pm_sleep_exit_cb;
-      cbs.enter_cb_user_arg = this;
-      cbs.exit_cb_user_arg = this;
-      esp_err_t cb_err = esp_pm_light_sleep_register_cbs(&cbs);
-      if (cb_err == ESP_OK)
-        ESP_LOGI(TAG, "Real light-sleep accounting enabled (ESP-IDF callbacks)");
-      else
-        ESP_LOGE(TAG, "Could not register light-sleep callbacks: %s", esp_err_to_name(cb_err));
-#else
-      ESP_LOGW(TAG, "Sleep debug requested but CONFIG_PM_LIGHT_SLEEP_CALLBACKS is disabled");
-#endif
-      dump_zigbee_sleep_state_();
-    }
+    ESP_LOGI(TAG, "Automatic light sleep enabled at %d MHz", cpu_freq_mhz);
+    ESP_LOGI(TAG, "[SLEEP TEST] Native ESP-IDF wake timer armed for 120 seconds (wake-capable, skip_unhandled_events=FALSE)");
+    ESP_LOGI(TAG, "[SLEEP TEST] Timer callback will save result to NVS and call esp_restart(); ESPHome loop() is NOT used to end the test");
+    ESP_LOGI(TAG, "[SLEEP TEST] After reboot, result remains in NVS and repeats every 10 seconds indefinitely");
+    dump_zigbee_sleep_state_();
   } else {
     ESP_LOGE(TAG, "esp_pm_configure failed: %s", esp_err_to_name(err));
+    esp_timer_stop(this->test_timer_);
+    esp_timer_delete(this->test_timer_);
+    this->test_timer_ = nullptr;
     this->mark_failed();
   }
 #else
@@ -183,6 +208,14 @@ void PowerManagementComponent::configure_pm_() {
 #else
   ESP_LOGE(TAG, "CONFIG_PM_ENABLE is not enabled");
   this->mark_failed();
+#endif
+}
+
+void PowerManagementComponent::finish_sleep_test_from_timer() {
+#ifdef CONFIG_PM_ENABLE
+  // Runs from the ESP timer task after the native timer wakes automatic light sleep.
+  // NVS and esp_restart() are intentionally done in task context, not ISR context.
+  this->stop_test_and_report_();
 #endif
 }
 
@@ -214,6 +247,11 @@ void PowerManagementComponent::stop_test_and_report_() {
   this->test_finished_ = true;
   this->pm_configured_ = false;
 
+  if (this->test_timer_ != nullptr) {
+    esp_timer_delete(this->test_timer_);
+    this->test_timer_ = nullptr;
+  }
+
   if (save_result_(result)) {
     esp_restart();
   } else {
@@ -230,13 +268,9 @@ void PowerManagementComponent::stop_test_and_report_() {
 }
 
 void PowerManagementComponent::loop() {
-#if defined(CONFIG_PM_ENABLE) && CONFIG_PM_LIGHT_SLEEP_CALLBACKS
-  if (!this->pm_configured_ || this->test_finished_)
-    return;
-  const uint32_t now_ms = millis();
-  if ((uint32_t) (now_ms - this->pm_start_ms_) >= this->test_duration_ms_)
-    this->stop_test_and_report_();
-#endif
+  // Intentionally empty for the diagnostic test. The 120 s completion path is driven
+  // entirely by the native wake-capable esp_timer, so ESPHome loop scheduling cannot
+  // prevent the test from ending.
 }
 
 void PowerManagementComponent::dump_config() {
@@ -246,7 +280,7 @@ void PowerManagementComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "  Start delay: %lu ms", (unsigned long) this->start_delay_ms_);
   ESP_LOGCONFIG(TAG, "  Sleep debug: %s", YESNO(this->sleep_debug_));
   if (this->sleep_debug_)
-    ESP_LOGCONFIG(TAG, "  Test mode: 120 s sleep -> NVS -> reboot -> saved result every 10 s indefinitely");
+    ESP_LOGCONFIG(TAG, "  Test mode: native 120 s ESP timer -> wake -> NVS -> reboot -> result every 10 s");
 }
 
 }  // namespace power_management
