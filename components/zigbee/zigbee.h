@@ -64,6 +64,7 @@ class ZigBeeComponent : public Component {
                          uint8_t app_version, uint8_t stack_version, uint8_t hw_version, std::string area,
                          uint8_t physical_env);
   void set_sleepy(bool sleepy) { this->sleepy_ = sleepy; }
+  bool is_sleepy() const { return this->sleepy_; }
   void set_trust_center_key(const char *trust_center_key);
   void set_device_version(uint8_t version) { this->device_version_ = version; }
   void add_cluster(uint8_t endpoint_id, uint16_t cluster_id, uint8_t role);
